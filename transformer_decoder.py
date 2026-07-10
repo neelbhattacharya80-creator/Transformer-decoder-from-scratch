@@ -697,4 +697,4 @@ model.load()
 
 
 model.eval()
-# model.generator()
+model.generator()
