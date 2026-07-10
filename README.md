@@ -4,9 +4,9 @@
 
 This project is a decoder-only Transformer implemented almost entirely from scratch to better understand how modern language models work at a low level.
 
-PyTorch is only used for automatic differentiation, tensor operations, and GPU acceleration. Core components—including multi-head self-attention, RoPE positional encoding, LayerNorm, dropout, feed-forward networks, AdamW, cross-entropy loss, KV caching, batching, and the training loop—are implemented manually. The current model contains approximately **30 million trainable parameters** and supports both training and autoregressive text generation.
+PyTorch is only used for automatic differentiation, tensor operations, and GPU acceleration. Core components including multi-head self-attention, RoPE positional encoding, LayerNorm, dropout, feed-forward networks, AdamW, cross-entropy loss, KV caching, batching, and the training loop—are implemented manually. The current model contains approximately **30 million trainable parameters** and supports both training and autoregressive text generation.
 
-## What I Learned
+## Learning Outcomes
 
 Building the model highlighted that implementation details are often more challenging than the underlying mathematics. I encountered bugs involving device management, where my custom AdamW optimizer remained on the CPU after the model was moved to the GPU, as well as several RoPE implementation bugs caused by incorrect tensor reshaping and inference positional indexing, all of which prevented the model from training or generating correctly until resolved.
 
