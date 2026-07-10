@@ -1,0 +1,22 @@
+__pycache__/
+*.pyc
+
+# Model weights
+*.pt
+*.pth
+*.npz
+
+# Python virtual environments
+.venv/
+venv/
+env/
+
+# Jupyter checkpoints
+.ipynb_checkpoints/
+
+# VS Code
+.vscode/
+
+# Operating system files
+.DS_Store
+Thumbs.db
