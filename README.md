@@ -20,10 +20,6 @@ Training required several optimization improvements. A fixed learning rate consi
 
 The model was initially trained on WikiText-103 to validate the implementation. The loss decreased from approximately **10** to **6** early in training, continued through **5 → 4**, plateaued briefly around **4**, and eventually converged to roughly **3.5**.
 
-## Current Performance
-
-The model has learned grammar, spelling, punctuation, and sentence structure well, producing fluent and readable text. Its main limitation is **long-range context retention**, as generation is strongly influenced by recently generated tokens, often causing **topic drift**. The primary bottlenecks are now **training data** and **compute** rather than the architecture itself.
-
 ## Features
 
 * Decoder-only Transformer
@@ -74,6 +70,10 @@ GPT:  an unknown man . R. <unk> , who wrote the novel in 1795 , wrote The Great 
 
 You:quit
 PS C:\Users\neelb\Documents\CS> 
+
+## Current Performance
+
+The model has learned grammar, spelling, punctuation, and sentence structure well, producing fluent and readable text. Its main limitation is **long-range context retention**, as generation is strongly influenced by recently generated tokens, often causing **topic drift**. The primary bottlenecks are now **training data** and **compute** rather than the architecture itself.
 
 ## Future Work
 
