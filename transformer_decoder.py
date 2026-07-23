@@ -578,28 +578,32 @@ class Residual(nn.Module):
         return x + a
 
 
-class FFN(nn.Module):
+class FFN(nn.Module):  # Swiglu
 
     def __init__(self, d_emb, hidden_size=1536):
         # Initialize parent class
         super().__init__()
-        self.W1 = nn.Parameter(torch.randn(d_emb, hidden_size) * (1 / math.sqrt(d_emb)))
-        self.b1 = nn.Parameter(torch.zeros(hidden_size))
+        self.W1 = nn.Parameter(
+            torch.randn(d_emb, hidden_size) * (1 / math.sqrt(hidden_size))
+        )
         self.W2 = nn.Parameter(
+            torch.randn(d_emb, hidden_size) * (1 / math.sqrt(hidden_size))
+        )
+        self.W3 = nn.Parameter(
             torch.randn(hidden_size, d_emb) * (1 / math.sqrt(hidden_size))
         )
-        self.b2 = nn.Parameter(torch.zeros(d_emb))
-        self.gelu = nn.GELU()
+        self.silu = nn.SiLU()
 
         self.dropout = Dropout()
 
     def forward(self, X):
-        Z1 = X @ self.W1 + self.b1
-        A1 = self.gelu(Z1)
-        Z2 = A1 @ self.W2 + self.b2
+        gate = self.W1 @ X
+        up = self.W2 @ X
+        h = self.silu(gate) * up
+        down = self.W3 @ h
         if self.training:
-            Z2 = self.dropout(Z2)
-        return Z2
+            down = self.dropout(down)
+        return down
 
 
 class CrossEntropyLoss(nn.Module):
