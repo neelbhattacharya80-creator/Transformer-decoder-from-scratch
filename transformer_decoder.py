@@ -16,7 +16,7 @@ class Transformer(nn.Module):
         vocab=50257,
         h=8,
         max_seq_len=512,
-        hidden_size=1536,
+        hidden_size=1024,  # 8/3d for swiglu
         batch_size=10,
         n_blocks=6,
     ):
@@ -618,10 +618,10 @@ class FFN(nn.Module):  # Swiglu
         self.dropout = Dropout()
 
     def forward(self, X):
-        gate = self.W1 @ X  # Shape -> (B,n,hidden)
-        up = self.W2 @ X  # Shape -> (B,n,hidden)
+        gate = X @ self.W1  # Shape -> (B,n,hidden)
+        up = X @ self.W2  # Shape -> (B,n,hidden)
         h = self.silu(gate) * up  # Shape -> (B,n,hidden)
-        down = self.W3 @ h  # Shape -> (B,n,d emb)
+        down = h @ self.W3  # Shape -> (B,n,d emb)
         if self.training:
             down = self.dropout(down)
         return down
