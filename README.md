@@ -4,7 +4,7 @@
 
 This project is a decoder-only Transformer implemented almost entirely from scratch to better understand how modern language models work at a low level.
 
-PyTorch is only used for automatic differentiation, tensor operations, and GPU acceleration. Core components including multi-head self-attention, RoPE positional encoding, LayerNorm, dropout, feed-forward networks, AdamW, cross-entropy loss, KV caching, batching, and the training loop—are implemented manually. The current model contains approximately **30 million trainable parameters** and supports both training and autoregressive text generation.
+PyTorch is only used for automatic differentiation, tensor operations, and GPU acceleration. Core components including multi-head self-attention, RoPE positional encoding, RMS Norm, dropout, Swiglu, AdamW, cross-entropy loss, KV caching, batching, and the training loop—are implemented manually. The current model contains approximately **30 million trainable parameters** and supports both training and autoregressive text generation.
 
 ## Learning Outcomes
 
@@ -14,7 +14,7 @@ As the project matured, I focused on optimization as well as correctness. I repl
 
 I also experimented with building my own Byte Pair Encoding tokenizer. While it functioned correctly, the pure Python implementation was far too slow for practical training, so I switched to **tiktoken** while keeping the remainder of the model implemented from scratch.
 
-Training required several optimization improvements. A fixed learning rate consistently stalled around a loss of **3.8**, so I introduced warmup and cosine learning-rate decay, allowing training to converge to approximately **3.5**. GPU memory limitations on my RTX 4060 prevented using larger batches, so I implemented gradient accumulation to achieve larger effective batch sizes while reducing optimization volatility.
+Training required several optimization improvements. A fixed learning rate consistently stalled around a loss of **3.8**, so I introduced warmup and cosine learning-rate decay, allowing training to converge to approximately **3.5**. GPU memory limitations on my RTX 4060 prevented using larger batches, so I implemented gradient accumulation to achieve larger effective batch sizes while reducing optimization volatility. Update(Switched layer norm and ffn to rms norm and swiglu)
 
 ## Training Progress
 
@@ -27,6 +27,8 @@ The model was initially trained on WikiText-103 to validate the implementation. 
 * Rotary Positional Embeddings (RoPE)
 * KV cache for efficient autoregressive inference
 * Pre-LayerNorm architecture
+* Swiglu
+* RMS Norm
 * Custom AdamW optimizer
 * Gradient accumulation
 * Gradient clipping
