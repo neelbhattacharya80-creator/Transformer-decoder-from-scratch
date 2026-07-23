@@ -25,7 +25,7 @@ class Transformer(nn.Module):
         self.tokenizer = tiktoken.get_encoding("gpt2")
         # self.tokenizer = Tokenisor() # python implentation is too slow
         self.embedding = Embedding(d_emb, vocab)
-        self.layer_norm = LayerNorm(d_emb)
+        self.norm = RMSNorm(d_emb)
         self.transformer_blocks = nn.ModuleList(
             [
                 TransformerBlock(d_emb, h, max_seq_len, hidden_size)
@@ -83,7 +83,7 @@ class Transformer(nn.Module):
             x_emb = transformer_block(
                 x_emb, use_cache=True, pos=0
             )  # Build KV Cache Shape->(1,n,d_emb)
-        x_norm = self.layer_norm(x_emb)  # Shape->(1,n,d_emb)
+        x_norm = self.norm(x_emb)  # Shape->(1,n,d_emb)
 
         next_token = self.language_modelling(tokens, x_norm)
 
@@ -103,7 +103,7 @@ class Transformer(nn.Module):
             x_emb = self.embedding(current_token)  # Shape->(1,n,d_emb)
             for transformer_block in self.transformer_blocks:
                 x_emb = transformer_block(x_emb, use_cache=True, pos=pos)
-            x_norm = self.layer_norm(x_emb)  # Shape->(1,n,d_emb)
+            x_norm = self.norm(x_emb)  # Shape->(1,n,d_emb)
             next_token = self.language_modelling(tokens, x_norm)  # int token id
             tokens = torch.cat(
                 [tokens, torch.tensor([[next_token]], device=tokens.device)], dim=1
@@ -149,7 +149,7 @@ class Transformer(nn.Module):
                 x_emb = self.embedding(batch)  # Shape->(B,n,d_emb)
                 for transformer_block in self.transformer_blocks:
                     x_emb = transformer_block(x_emb)  # Shape->(B,n,d_emb)
-                x_norm = self.layer_norm(x_emb)  # Shape->(B,n,d_emb)
+                x_norm = self.norm(x_emb)  # Shape->(B,n,d_emb)
 
                 loss = self.language_modelling(batch, x_norm)  # compute loss
                 scaled_loss = loss / a_steps  # Accumulate and scale
@@ -215,17 +215,17 @@ class TransformerBlock(nn.Module):
     def __init__(self, d_emb, h, max_seq_len, hidden_size):
         # Initialize parent class
         super().__init__()
-        self.layer_norm1 = LayerNorm(d_emb)
-        self.layer_norm2 = LayerNorm(d_emb)
+        self.norm1 = RMSNorm(d_emb)
+        self.norm2 = RMSNorm(d_emb)
         self.multi_head_attention = MultiHeadAttention(h, d_emb, max_seq_len)
         self.residual = Residual()
         self.ffn = FFN(d_emb, hidden_size)
 
     def forward(self, X, use_cache=False, pos=0):
-        x_norm1 = self.layer_norm1(X)  # Shape -> (B,n,d_emb)
+        x_norm1 = self.norm1(X)  # Shape -> (B,n,d_emb)
         a = self.multi_head_attention(x_norm1, use_cache, pos)  # Shape -> (B,n,d_emb)
         z = self.residual(X, a)  # Shape -> (B,n,d_emb)
-        z_norm = self.layer_norm2(z)  # Shape -> (B,n,d_emb)
+        z_norm = self.norm2(z)  # Shape -> (B,n,d_emb)
         f = self.ffn(z_norm)  # Shape -> (B,n,d_emb)
         y = z + f
 
@@ -554,6 +554,27 @@ class LayerNorm(nn.Module):
         return X
 
 
+class RMSNorm(nn.Module):
+    def __init__(self, d_emb):
+        # Initialize parent class
+        super().__init__()
+
+        # Learnable Parameter
+        self.gamma = nn.Parameter(torch.ones(1, 1, d_emb))
+
+    def forward(self, X):  # Normalize using rms
+        B, N, d_emb = X.shape
+        rms = self.rms(X)
+        norm_x = X / rms * self.gamma
+        return norm_x
+
+    def rms(self, x):
+        B, N, d_emb = x.shape
+        mean = (1 / d_emb) * torch.sum(x**2, dim=-1, keepdim=True)
+        rms = torch.sqrt(mean + 1e-9)
+        return rms
+
+
 class Dropout(nn.Module):
     def __init__(self, keep=0.9):
         # Initialize parent class
@@ -597,10 +618,10 @@ class FFN(nn.Module):  # Swiglu
         self.dropout = Dropout()
 
     def forward(self, X):
-        gate = self.W1 @ X
-        up = self.W2 @ X
-        h = self.silu(gate) * up
-        down = self.W3 @ h
+        gate = self.W1 @ X  # Shape -> (B,n,hidden)
+        up = self.W2 @ X  # Shape -> (B,n,hidden)
+        h = self.silu(gate) * up  # Shape -> (B,n,hidden)
+        down = self.W3 @ h  # Shape -> (B,n,d emb)
         if self.training:
             down = self.dropout(down)
         return down
