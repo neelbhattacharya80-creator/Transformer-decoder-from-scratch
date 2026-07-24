@@ -26,7 +26,7 @@ The model was initially trained on WikiText-103 to validate the implementation. 
 * Multi-head self-attention
 * Rotary Positional Embeddings (RoPE)
 * KV cache for efficient autoregressive inference
-* Pre-LayerNorm architecture
+* Pre-Norm architecture
 * Swiglu
 * RMS Norm
 * Custom AdamW optimizer
