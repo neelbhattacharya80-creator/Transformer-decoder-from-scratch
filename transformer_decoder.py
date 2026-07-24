@@ -28,7 +28,7 @@ class Transformer(nn.Module):
         self.norm = RMSNorm(d_emb)
         self.transformer_blocks = nn.ModuleList(
             [
-                TransformerBlock(d_emb, h, max_seq_len, hidden_size)
+                TransformerBlock(d_emb, h, max_seq_len, hidden_size, n_blocks)
                 for block in range(n_blocks)
             ]
         )
@@ -212,14 +212,14 @@ class Transformer(nn.Module):
 
 class TransformerBlock(nn.Module):
 
-    def __init__(self, d_emb, h, max_seq_len, hidden_size):
+    def __init__(self, d_emb, h, max_seq_len, hidden_size, n_blocks):
         # Initialize parent class
         super().__init__()
         self.norm1 = RMSNorm(d_emb)
         self.norm2 = RMSNorm(d_emb)
-        self.multi_head_attention = MultiHeadAttention(h, d_emb, max_seq_len)
+        self.multi_head_attention = MultiHeadAttention(h, d_emb, max_seq_len, n_blocks)
         self.residual = Residual()
-        self.ffn = FFN(d_emb, hidden_size)
+        self.ffn = FFN(d_emb, hidden_size, n_blocks)
 
     def forward(self, X, use_cache=False, pos=0):
         x_norm1 = self.norm1(X)  # Shape -> (B,n,d_emb)
@@ -234,7 +234,7 @@ class TransformerBlock(nn.Module):
 
 class MultiHeadAttention(nn.Module):
 
-    def __init__(self, h=8, d_emb=384, max_seq_len=2048):
+    def __init__(self, h, d_emb, max_seq_len, n_blocks):
         # Initialize parent class
         super().__init__()
 
@@ -244,6 +244,7 @@ class MultiHeadAttention(nn.Module):
 
         self.scale_emb = 1 / math.sqrt(d_emb)
         self.scale_kq = 1 / math.sqrt(self.d_h)
+        self.scale_residual = 1 / math.sqrt(2 * n_blocks)
 
         self.register_buffer(  # Buffer -> Not a parameter, moves devices automatically, caches
             "mask", torch.triu(torch.ones(max_seq_len, max_seq_len), diagonal=1).bool()
@@ -253,7 +254,9 @@ class MultiHeadAttention(nn.Module):
         self.dropout = Dropout()
 
         self.W_qkv = nn.Parameter(torch.randn(d_emb, 3 * d_emb) * self.scale_emb)
-        self.W_o = nn.Parameter(torch.randn(d_emb, d_emb) * self.scale_emb)
+        self.W_o = nn.Parameter(
+            torch.randn(d_emb, d_emb) * self.scale_emb * self.scale_residual
+        )
 
         self.k_cache = None
         self.v_cache = None
@@ -601,9 +604,12 @@ class Residual(nn.Module):
 
 class FFN(nn.Module):  # Swiglu
 
-    def __init__(self, d_emb, hidden_size=1536):
+    def __init__(self, d_emb, hidden_size, n_blocks):
         # Initialize parent class
         super().__init__()
+
+        self.scale_residual = 1 / math.sqrt(2 * n_blocks)
+
         self.W1 = nn.Parameter(
             torch.randn(d_emb, hidden_size) * (1 / math.sqrt(hidden_size))
         )
@@ -611,7 +617,8 @@ class FFN(nn.Module):  # Swiglu
             torch.randn(d_emb, hidden_size) * (1 / math.sqrt(hidden_size))
         )
         self.W3 = nn.Parameter(
-            torch.randn(hidden_size, d_emb) * (1 / math.sqrt(hidden_size))
+            torch.randn(hidden_size, d_emb)
+            * (1 / math.sqrt(hidden_size) * self.scale_residual)
         )
         self.silu = nn.SiLU()
 
