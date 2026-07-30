@@ -6,6 +6,7 @@ import math
 from collections import Counter
 import json
 from functools import lru_cache
+from pathlib import Path
 
 
 class Transformer(nn.Module):
@@ -117,7 +118,7 @@ class Transformer(nn.Module):
         response = self.tokenizer.decode(generation.flatten().tolist())
         return response
 
-    def fit(self, text, epochs=30, steps=3000, a_steps=10, peak_lr=1e-4):
+    def fit(self, text, epochs=30, steps=30000, a_steps=10, peak_lr=1e-4):
 
         # self.tokenizer.byte_pair_encoding(text, self.vocab)
         tokens = torch.tensor(
@@ -198,15 +199,17 @@ class Transformer(nn.Module):
 
     def save(
         self,
-        path=r"C:\Users\neelb\Documents\CS\Projects\Transformer\transformer_params.pt",
+        filename=r"transformer_params.pt",
     ):
+        path = Path(__file__).parent / filename
         torch.save(self.state_dict(), path)
         print("Succesfully saved parameters to path")
 
     def load(
         self,
-        path=r"C:\Users\neelb\Documents\CS\Projects\Transformer\transformer_params.pt",
+        filename=r"transformer_params.pt",
     ):
+        path = Path(__file__).parent / filename
         self.load_state_dict(torch.load(path, map_location=device))
 
 
