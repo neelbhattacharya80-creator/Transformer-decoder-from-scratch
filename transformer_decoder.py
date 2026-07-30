@@ -11,15 +11,15 @@ from pathlib import Path
 
 class Transformer(nn.Module):
 
-    def __init__(  # Total parameters: ~30M # Converged loss ~3.54 after 75k steps
+    def __init__(  # Total parameters: ~50M
         self,
-        d_emb=384,
+        d_emb=512,
         vocab=50257,
         h=8,
         max_seq_len=512,
-        hidden_size=1024,  # 8/3d for swiglu
+        hidden_size=1365,  # 8/3d for swiglu
         batch_size=10,
-        n_blocks=6,
+        n_blocks=8,
     ):
         # Initialize parent class
         super().__init__()
@@ -118,7 +118,7 @@ class Transformer(nn.Module):
         response = self.tokenizer.decode(generation.flatten().tolist())
         return response
 
-    def fit(self, text, epochs=30, steps=30000, a_steps=10, peak_lr=1e-4):
+    def fit(self, text, epochs=100, steps=5000, a_steps=10, peak_lr=1e-4):
 
         # self.tokenizer.byte_pair_encoding(text, self.vocab)
         tokens = torch.tensor(
@@ -725,7 +725,7 @@ print(f"Total trainable parameters: {total_params:,}")
 
 # model.load()
 
-# model = torch.compile(model, mode="max-autotune")
+model = torch.compile(model, mode="max-autotune")
 
 model.train()
 model.fit(text)
