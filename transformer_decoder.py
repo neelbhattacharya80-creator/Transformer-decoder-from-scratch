@@ -725,7 +725,7 @@ print(f"Total trainable parameters: {total_params:,}")
 
 # model.load()
 
-model = torch.compile(model, mode="max-autotune")
+# model = torch.compile(model, mode="max-autotune")
 
 model.train()
 model.fit(text)
