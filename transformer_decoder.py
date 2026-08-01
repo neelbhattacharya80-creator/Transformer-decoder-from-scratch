@@ -11,7 +11,7 @@ from pathlib import Path
 
 class Transformer(nn.Module):
 
-    def __init__(  # Total parameters: ~50M
+    def __init__(  # Total parameters: ~30M
         self,
         d_emb=384,
         vocab=50257,
