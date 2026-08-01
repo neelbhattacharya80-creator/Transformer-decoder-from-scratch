@@ -13,13 +13,13 @@ class Transformer(nn.Module):
 
     def __init__(  # Total parameters: ~50M
         self,
-        d_emb=512,
+        d_emb=384,
         vocab=50257,
         h=8,
         max_seq_len=512,
-        hidden_size=1365,  # 8/3d for swiglu
+        hidden_size=1024,  # 8/3d for swiglu
         batch_size=10,
-        n_blocks=8,
+        n_blocks=6,
     ):
         # Initialize parent class
         super().__init__()
