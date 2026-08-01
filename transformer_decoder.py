@@ -447,20 +447,20 @@ class Tokenizer:  # Byte Pair Encoding
 
     def save(
         self,
-        filename=r"C:\Users\neelb\Documents\CS\Projects\Transformer\tokenisor.json",
+        filename=r"tokenisor.json",
     ):
-
+        path = Path(__file__).parent / filename
         data = {"merges": [[a, b] for (a, b) in self.merges]}
 
-        with open(filename, "w") as f:
+        with open(path, "w") as f:
             json.dump(data, f)
 
     def load(
         self,
-        filename=r"C:\Users\neelb\Documents\CS\Projects\Transformer\tokenisor.json",
+        filename=r"tokenisor.json",
     ):
-
-        with open(filename, "r") as f:
+        path = Path(__file__).parent / filename
+        with open(path, "r") as f:
             data = json.load(f)
 
         self.merges = [tuple(pair) for pair in data["merges"]]
