@@ -498,7 +498,7 @@ class Embedding(nn.Module):
         # Initialize parent class
         super().__init__()
 
-        self.E = nn.Parameter(torch.randn((vocab, d_emb)) * (1 / math.sqrt(vocab)))
+        self.E = nn.Parameter(torch.randn((vocab, d_emb)) * (1 / math.sqrt(d_emb)))
 
     def forward(self, X):
         X = X.to(self.E.device)
