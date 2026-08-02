@@ -506,7 +506,7 @@ class Embedding(nn.Module):
         self.E_master = nn.Parameter(
             torch.randn((vocab, d_emb)) * (1 / math.sqrt(d_emb))
         )
-        self.E = self.E.to(torch.bfloat16)
+        self.E = self.E_master.to(torch.bfloat16)
 
     def forward(self, X):
         X = X.to(self.E.device)
@@ -518,8 +518,8 @@ class PositionalEncoding(nn.Module):  # ROPE
         # Initialize parent class
         super().__init__()
 
-        m = torch.arange(max_seq_len, dtype=torch.float32)
-        theta = 10000 ** ((-2 * torch.arange(0, d_h, 2, dtype=torch.float32)) / d_h)
+        m = torch.arange(max_seq_len, dtype=torch.bfloat16)
+        theta = 10000 ** ((-2 * torch.arange(0, d_h, 2, dtype=torch.bfloat16)) / d_h)
 
         angles = torch.outer(m, theta)
         angles = torch.cat((angles, angles), dim=-1)
@@ -579,7 +579,7 @@ class Dropout(nn.Module):
 
     def forward(self, x):
         if self.training:
-            mask = (torch.rand_like(x) < self.keep).float()
+            mask = (torch.rand_like(x) < self.keep).to(x.dtype)
             x_drop = (x * mask) / self.keep
             return x_drop
         else:
