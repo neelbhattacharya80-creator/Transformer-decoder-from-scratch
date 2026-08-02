@@ -256,10 +256,13 @@ class MultiHeadAttention(nn.Module):
 
         self.dropout = Dropout()
 
-        self.W_qkv = nn.Parameter(torch.randn(d_emb, 3 * d_emb) * self.scale_emb)
-        self.W_o = nn.Parameter(
+        self.W_qkv_master = nn.Parameter(torch.randn(d_emb, 3 * d_emb) * self.scale_emb)
+        self.W_o_master = nn.Parameter(
             torch.randn(d_emb, d_emb) * self.scale_emb * self.scale_residual
         )
+
+        self.W_qkv = self.W_qkv_master.to(torch.bfloat16)
+        self.W_o = self.W_o_master.to(torch.bfloat16)
 
         self.k_cache = None
         self.v_cache = None
@@ -298,11 +301,13 @@ class MultiHeadAttention(nn.Module):
             Z = Z.masked_fill(mask, float("-inf"))
 
         # Softmax
+        Z = Z.to(torch.float32)  # upscale
         S = Z - Z.max(dim=-1, keepdim=True).values  # Shape->(B,h,n,n)
         S_exp = torch.exp(S)
         S = S_exp / torch.sum(S_exp, dim=-1, keepdim=True)
         if self.training:
             S = self.dropout(S)  # Attention dropout
+        S = S.to(torch.bfloat16)  # downscale
 
         A = S @ V_  # Shape->(B,h,n,d_h)
         A = A.transpose(1, 2).reshape(B, n, d_emb)  # Shape->(B,n,d_emb)
@@ -498,7 +503,10 @@ class Embedding(nn.Module):
         # Initialize parent class
         super().__init__()
 
-        self.E = nn.Parameter(torch.randn((vocab, d_emb)) * (1 / math.sqrt(d_emb)))
+        self.E_master = nn.Parameter(
+            torch.randn((vocab, d_emb)) * (1 / math.sqrt(d_emb))
+        )
+        self.E = self.E.to(torch.bfloat16)
 
     def forward(self, X):
         X = X.to(self.E.device)
@@ -540,26 +548,6 @@ class PositionalEncoding(nn.Module):  # ROPE
         return Q, K
 
 
-class LayerNorm(nn.Module):
-    def __init__(self, d_emb):
-        # Initialize parent class
-        super().__init__()
-
-        # Allow slight shifting and scaling
-        self.gamma = nn.Parameter(torch.ones(1, 1, d_emb))
-        self.beta = nn.Parameter(torch.zeros(1, 1, d_emb))
-
-    def forward(self, X):  # Normalize tokens indiviually
-        B, N, d_emb = X.shape
-        mean = (1 / d_emb) * torch.sum(X, dim=-1, keepdim=True)  # Shape-> (B,N,1)
-        var = (1 / d_emb) * torch.sum(
-            (X - mean) ** 2, dim=-1, keepdim=True
-        )  # Shape-> (B,N,1)
-
-        X = ((X - mean) / torch.sqrt(var + 1e-9)) * self.gamma + self.beta
-        return X
-
-
 class RMSNorm(nn.Module):
     def __init__(self, d_emb):
         # Initialize parent class
@@ -569,10 +557,12 @@ class RMSNorm(nn.Module):
         self.gamma = nn.Parameter(torch.ones(1, 1, d_emb))
 
     def forward(self, X):  # Normalize using rms
+        if X.dtype == torch.bfloat16:
+            X = X.to(torch.float32)
         B, N, d_emb = X.shape
         rms = self.rms(X)
         norm_x = X / rms * self.gamma
-        return norm_x
+        return norm_x.to(torch.bfloat16)
 
     def rms(self, x):
         B, N, d_emb = x.shape
@@ -613,16 +603,21 @@ class FFN(nn.Module):  # Swiglu
 
         self.scale_residual = 1 / math.sqrt(2 * n_blocks)
 
-        self.W1 = nn.Parameter(
+        self.W1_master = nn.Parameter(
             torch.randn(d_emb, hidden_size) * (1 / math.sqrt(hidden_size))
         )
-        self.W2 = nn.Parameter(
+        self.W2_master = nn.Parameter(
             torch.randn(d_emb, hidden_size) * (1 / math.sqrt(hidden_size))
         )
-        self.W3 = nn.Parameter(
+        self.W3_master = nn.Parameter(
             torch.randn(hidden_size, d_emb)
             * (1 / math.sqrt(hidden_size) * self.scale_residual)
         )
+
+        self.W1 = self.W1_master.to(torch.bfloat16)
+        self.W2 = self.W2_master.to(torch.bfloat16)
+        self.W3 = self.W3_master.to(torch.bfloat16)
+
         self.silu = nn.SiLU()
 
         self.dropout = Dropout()
@@ -675,6 +670,8 @@ class LanguageModelling(nn.Module):
         if self.training:
             temp = 1  # Standard softmax
             logits = y @ self.emb.T  # Shape->(B, n, vocab)
+            if logits.dtype == torch.bfloat16:
+                logits = logits.to(torch.float32)
             # Softmax
             logits = (
                 logits - logits.max(dim=-1, keepdim=True).values
@@ -689,6 +686,8 @@ class LanguageModelling(nn.Module):
             # y shape-> (1,n,d_emb)
             y_last = y[:, -1, :]
             logit = y_last @ self.emb.T
+            if logit.dtype == torch.bfloat16:
+                logit = logit.to(torch.float32)
             k = 50  # Top K Sampling
             topk, _ = torch.topk(logit, k)
             threshold = topk[:, [-1]]
