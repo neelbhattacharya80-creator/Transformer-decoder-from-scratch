@@ -668,10 +668,11 @@ class LanguageModelling(nn.Module):
         # Initialize parent class
         super().__init__()
         self.cross_entropy_loss = CrossEntropyLoss()
-        self.emb = emb.to(torch.bfloat16)  # Shape->(vocab,d_emb)
+        self.emb = emb  # Shape->(vocab,d_emb)
         self.loss = 0
 
     def forward(self, token_ids, y, temp=0.6):  # y->(B, n, emb)
+        emb = self.emb.to(torch.bfloat16)  # Shape->(vocab,d_emb)
         if temp <= 0:  # Temperature Scaling
             temp = 1  # Standard softmax
 
