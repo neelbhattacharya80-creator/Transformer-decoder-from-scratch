@@ -33,7 +33,7 @@ class Transformer(nn.Module):
                 for block in range(n_blocks)
             ]
         )
-        self.language_modelling = LanguageModelling(self.embedding.E)
+        self.language_modelling = LanguageModelling(self.embedding.E_master)
         self.batch_generator = BatchGenerator(max_seq_len, batch_size)
         self.optimiser = None  # AdamW(self.parameters())
 
@@ -261,14 +261,15 @@ class MultiHeadAttention(nn.Module):
             torch.randn(d_emb, d_emb) * self.scale_emb * self.scale_residual
         )
 
-        self.W_qkv = self.W_qkv_master.to(torch.bfloat16)
-        self.W_o = self.W_o_master.to(torch.bfloat16)
-
         self.k_cache = None
         self.v_cache = None
 
     def forward(self, X, use_cache=False, pos=0):
-        QKV = X @ self.W_qkv  # Shape->(B,n,3*d_emb)
+        # bf16 weights
+        W_qkv = self.W_qkv_master.to(torch.bfloat16)
+        W_o = self.W_o_master.to(torch.bfloat16)
+
+        QKV = X @ W_qkv  # Shape->(B,n,3*d_emb)
         Q, K, V = torch.chunk(QKV, 3, dim=-1)  # Shape->(B,n,d_emb)
 
         B, n, d_emb = X.shape
@@ -312,7 +313,7 @@ class MultiHeadAttention(nn.Module):
         A = S @ V_  # Shape->(B,h,n,d_h)
         A = A.transpose(1, 2).reshape(B, n, d_emb)  # Shape->(B,n,d_emb)
 
-        y = A @ self.W_o  # Shape->(B, n, d_emb)
+        y = A @ W_o  # Shape->(B, n, d_emb)
         if self.training:
             y = self.dropout(y)  # Output dropout
 
@@ -344,6 +345,8 @@ class AdamW:
                 g = p.grad
                 if g is None:
                     continue
+                if g.dtype == torch.bfloat16:
+                    g = g.to(torch.float32)
 
                 # Weight Decay
                 if self.w_decay != 0:
@@ -509,11 +512,12 @@ class Embedding(nn.Module):
         self.E_master = nn.Parameter(
             torch.randn((vocab, d_emb)) * (1 / math.sqrt(d_emb))
         )
-        self.E = self.E_master.to(torch.bfloat16)
 
     def forward(self, X):
-        X = X.to(self.E.device)
-        return self.E[X]
+        # bf16 weights
+        E = self.E_master.to(torch.bfloat16)
+        X = X.to(E.device)
+        return E[X]
 
 
 class PositionalEncoding(nn.Module):  # ROPE
@@ -617,19 +621,20 @@ class FFN(nn.Module):  # Swiglu
             * (1 / math.sqrt(hidden_size) * self.scale_residual)
         )
 
-        self.W1 = self.W1_master.to(torch.bfloat16)
-        self.W2 = self.W2_master.to(torch.bfloat16)
-        self.W3 = self.W3_master.to(torch.bfloat16)
-
         self.silu = nn.SiLU()
 
         self.dropout = Dropout()
 
     def forward(self, X):
-        gate = X @ self.W1  # Shape -> (B,n,hidden)
-        up = X @ self.W2  # Shape -> (B,n,hidden)
+        # bf16 weights
+        W1 = self.W1_master.to(torch.bfloat16)
+        W2 = self.W2_master.to(torch.bfloat16)
+        W3 = self.W3_master.to(torch.bfloat16)
+
+        gate = X @ W1  # Shape -> (B,n,hidden)
+        up = X @ W2  # Shape -> (B,n,hidden)
         h = self.silu(gate) * up  # Shape -> (B,n,hidden)
-        down = h @ self.W3  # Shape -> (B,n,d emb)
+        down = h @ W3  # Shape -> (B,n,d emb)
         if self.training:
             down = self.dropout(down)
         return down
@@ -663,7 +668,7 @@ class LanguageModelling(nn.Module):
         # Initialize parent class
         super().__init__()
         self.cross_entropy_loss = CrossEntropyLoss()
-        self.emb = emb  # Shape->(vocab,d_emb)
+        self.emb = emb.to(torch.bfloat16)  # Shape->(vocab,d_emb)
         self.loss = 0
 
     def forward(self, token_ids, y, temp=0.6):  # y->(B, n, emb)
