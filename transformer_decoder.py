@@ -678,7 +678,7 @@ class LanguageModelling(nn.Module):
 
         if self.training:
             temp = 1  # Standard softmax
-            logits = y @ self.emb.T  # Shape->(B, n, vocab)
+            logits = y @ emb.T  # Shape->(B, n, vocab)
             if logits.dtype == torch.bfloat16:
                 logits = logits.to(torch.float32)
             # Softmax
@@ -694,7 +694,7 @@ class LanguageModelling(nn.Module):
         else:  # generation
             # y shape-> (1,n,d_emb)
             y_last = y[:, -1, :]
-            logit = y_last @ self.emb.T
+            logit = y_last @ emb.T
             if logit.dtype == torch.bfloat16:
                 logit = logit.to(torch.float32)
             k = 50  # Top K Sampling
@@ -717,7 +717,7 @@ def load_data():
     dataset = load_dataset("Salesforce/wikitext", "wikitext-103-v1")
     text = "\n".join(dataset["train"]["text"])
     print("Data Imported Succesfully")
-    return text
+    return text[:10000]
 
 
 def count_parameters(model):
