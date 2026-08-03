@@ -7,19 +7,21 @@ from collections import Counter
 import json
 from functools import lru_cache
 from pathlib import Path
+import numpy as np
+import os
 
 
 class Transformer(nn.Module):
 
-    def __init__(  # Total parameters: ~30M
+    def __init__(  # Total parameters: ~96M
         self,
-        d_emb=384,
+        d_emb=768,
         vocab=50257,
         h=8,
         max_seq_len=512,
-        hidden_size=1024,  # 8/3d for swiglu
+        hidden_size=2048,  # 8/3d for swiglu
         batch_size=10,
-        n_blocks=6,
+        n_blocks=8,
     ):
         # Initialize parent class
         super().__init__()
@@ -118,14 +120,10 @@ class Transformer(nn.Module):
         response = self.tokenizer.decode(generation.flatten().tolist())
         return response
 
-    def fit(self, text, epochs=100, steps=5000, a_steps=10, peak_lr=1e-4):
+    def fit(self, tokens, epochs=100, steps=5000, a_steps=10, peak_lr=1e-4):
 
         # self.tokenizer.byte_pair_encoding(text, self.vocab)
-        tokens = torch.tensor(
-            self.tokenizer.encode(text),
-            dtype=torch.long,
-        )  # Shape -> (N,)
-        print("Tokenised")
+
         self.to(device)  # move to gpu
 
         if self.optimiser is None:
@@ -494,16 +492,13 @@ class BatchGenerator(nn.Module):
         super().__init__()
         self.max_seq_len = max_seq_len
         self.batch_size = batch_size
-        self.register_buffer("offsets", torch.arange(self.max_seq_len))
+        self.offsets = np.arange(max_seq_len)
 
     def forward(self, tokens):  # Shape -> (N,)
         N = len(tokens)
-        starts = torch.randint(
-            0, N - self.max_seq_len - 1, (self.batch_size,), device=tokens.device
-        )
-        offsets = self.offsets.to(tokens.device)
-        indices = starts[:, None] + offsets
-        batch = tokens[indices]
+        starts = np.random.randint(0, N - self.max_seq_len - 1, size=self.batch_size)
+        index = starts[:, None] + self.offsets
+        batch = torch.from_numpy(tokens[index])
         return batch  # Shape -> (batch_size,n)
 
 
@@ -718,18 +713,43 @@ class LanguageModelling(nn.Module):
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
-def load_data():
-    dataset = load_dataset("Salesforce/wikitext", "wikitext-103-v1")
-    text = "\n".join(dataset["train"]["text"])
-    print("Data Imported Succesfully")
-    return text[:10000]
+def load_data(target=1200000000, filepath="fineweb-tokenised.bin"):
+    if os.path.exists(filepath):
+        print("Found tokenised file")
+        tokens_memmap = np.memmap(filepath, dtype=np.uint16, mode="r")
+        print("Loaded tokenised file")
+        return tokens_memmap
+    print("tokenising file")
+    tokenisor = tiktoken.get_encoding("gpt2")
+    dataset = load_dataset(
+        "HuggingFaceFW/fineweb", name="sample-10BT", split="train", streaming=True
+    )
+
+    path = Path(__file__).parent / filepath
+
+    total_tokens = 0
+    with open(path, "wb") as f:
+        for row in dataset:
+            tokens = tokenisor.encode_ordinary(row["text"])
+            tokens.append(50256)
+
+            tokens_np = np.array(tokens, dtype=np.uint16)
+            f.write(tokens_np.tobytes())
+
+            total_tokens += len(tokens)
+
+            if total_tokens >= target:
+                break
+    print(f"Finished tokenizing {total_tokens:,} tokens and saved to {path}")
+
+    return np.memmap(filepath, dtype=np.uint16, mode="r")
 
 
 def count_parameters(model):
     return sum(p.numel() for p in model.parameters() if p.requires_grad)
 
 
-text = load_data()
+tokens = load_data()
 
 
 model = Transformer()
@@ -738,10 +758,10 @@ print(f"Total trainable parameters: {total_params:,}")
 
 # model.load()
 
-# model = torch.compile(model, mode="max-autotune")
+model = torch.compile(model, mode="max-autotune")
 
 model.train()
-model.fit(text)
+model.fit(tokens)
 
 
 # model.eval()
