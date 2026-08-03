@@ -337,24 +337,28 @@ class AdamW:
 
     def update(self, lr=2e-4):
         with torch.no_grad():  # disable computational graph
+            # bias correction
+            bc1 = 1 - self.beta1**self.t
+            bc2 = 1 - self.beta2**self.t
             for i, p in enumerate(self.params):
                 g = p.grad
                 if g is None:
                     continue
+
+                # Weight Decay
+                if self.w_decay != 0:
+                    p.add_(p, alpha=-lr * self.w_decay)
+
                 # Compute 1st and 2nd moment
                 self.momentum[i].mul_(self.beta1).add_(g, alpha=1 - self.beta1)
                 self.velocity[i].mul_(self.beta2).addcmul_(g, g, value=1 - self.beta2)
 
                 # Bias correction
-                m_hat = self.momentum[i] / (1 - self.beta1**self.t)
-                v_hat = self.velocity[i] / (1 - self.beta2**self.t)
+                m_hat = self.momentum[i] / bc1
+                v_hat = self.velocity[i] / bc2
 
                 # Update
-                p.addcdiv_(m_hat, v_hat.sqrt().add(self.e), value=-lr)
-
-                # Weight Decay
-                if self.w_decay != 0:
-                    p.add(p, alpha=-lr * self.w_decay)
+                p.addcdiv_(m_hat, v_hat.sqrt_().add_(self.e), value=-lr)
 
             self.t += 1
 
