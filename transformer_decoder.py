@@ -327,8 +327,6 @@ class AdamW:
         self.w_decay = w_decay
         self.momentum = [torch.zeros_like(p) for p in self.params]
         self.velocity = [torch.zeros_like(p) for p in self.params]
-        self.m_h = [torch.zeros_like(p) for p in self.params]
-        self.v_h = [torch.zeros_like(p) for p in self.params]
         self.t = 1
         self.e = 1e-8
 
@@ -339,25 +337,26 @@ class AdamW:
 
     def update(self, lr=2e-4):
         with torch.no_grad():  # disable computational graph
-            for i in range(len(self.params)):
-                # compute gradients
-                g = self.params[i].grad
-                # compute moments
+            for i, p in enumerate(self.params):
+                g = p.grad
                 if g is None:
                     continue
-                self.momentum[i] = self.beta1 * self.momentum[i] + (1 - self.beta1) * g
-                self.velocity[i] = self.beta2 * self.velocity[i] + (1 - self.beta2) * (
-                    g**2
-                )
-                # Bias Correction
-                self.m_h[i] = self.momentum[i] / (1 - (self.beta1) ** self.t)
-                self.v_h[i] = self.velocity[i] / (1 - (self.beta2) ** self.t)
+                # Compute 1st and 2nd moment
+                self.momentum[i].mul_(self.beta1).add_(g, alpha=1 - self.beta1)
+                self.velocity[i].mul_(self.beta2).addcmul_(g, g, value=1 - self.beta2)
+
+                # Bias correction
+                m_hat = self.momentum[i] / (1 - self.beta1**self.t)
+                v_hat = self.velocity[i] / (1 - self.beta2**self.t)
+
+                # Update
+                p.addcdiv_(m_hat, v_hat.sqrt().add(self.e), value=-lr)
+
+                # Weight Decay
+                if self.w_decay != 0:
+                    p.add(p, alpha=-lr * self.w_decay)
+
             self.t += 1
-            for i in range(len(self.params)):
-                self.params[i] -= (
-                    +lr * (self.m_h[i] / (torch.sqrt(self.v_h[i]) + self.e))
-                    + lr * self.w_decay * self.params[i]
-                )
 
 
 class Tokenizer:  # Byte Pair Encoding
