@@ -5,6 +5,8 @@ __pycache__/
 *.pt
 *.pth
 *.npz
+*.json
+*.bin
 
 # Python virtual environments
 .venv/
