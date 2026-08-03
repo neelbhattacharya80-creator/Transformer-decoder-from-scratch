@@ -147,9 +147,9 @@ class Transformer(nn.Module):
                 # move to gpu
                 batch = batch.to(device)
 
-                x_emb = self.embedding(batch)  # Shape->(B,n,d_emb)
+                x_emb = self.embedding(batch, step)  # Shape->(B,n,d_emb)
                 for transformer_block in self.transformer_blocks:
-                    x_emb = transformer_block(x_emb)  # Shape->(B,n,d_emb)
+                    x_emb = transformer_block(x_emb, step)  # Shape->(B,n,d_emb)
                 x_norm = self.norm(x_emb)  # Shape->(B,n,d_emb)
 
                 loss = self.language_modelling(batch, x_norm)  # compute loss
@@ -224,12 +224,14 @@ class TransformerBlock(nn.Module):
         self.residual = Residual()
         self.ffn = FFN(d_emb, hidden_size, n_blocks)
 
-    def forward(self, X, use_cache=False, pos=0):
+    def forward(self, X, step, use_cache=False, pos=0):
         x_norm1 = self.norm1(X)  # Shape -> (B,n,d_emb)
-        a = self.multi_head_attention(x_norm1, use_cache, pos)  # Shape -> (B,n,d_emb)
+        a = self.multi_head_attention(
+            x_norm1, step, use_cache, pos
+        )  # Shape -> (B,n,d_emb)
         z = self.residual(X, a)  # Shape -> (B,n,d_emb)
         z_norm = self.norm2(z)  # Shape -> (B,n,d_emb)
-        f = self.ffn(z_norm)  # Shape -> (B,n,d_emb)
+        f = self.ffn(z_norm, step)  # Shape -> (B,n,d_emb)
         y = z + f
 
         return y
@@ -264,12 +266,13 @@ class MultiHeadAttention(nn.Module):
         self.k_cache = None
         self.v_cache = None
 
-    def forward(self, X, use_cache=False, pos=0):
+    def forward(self, X, step, use_cache=False, pos=0):
         # bf16 weights
-        W_qkv = self.W_qkv_master.to(torch.bfloat16)
-        W_o = self.W_o_master.to(torch.bfloat16)
+        if step % 10 == 0:
+            self.W_qkv = self.W_qkv_master.to(torch.bfloat16)
+            self.W_o = self.W_o_master.to(torch.bfloat16)
 
-        QKV = X @ W_qkv  # Shape->(B,n,3*d_emb)
+        QKV = X @ self.W_qkv  # Shape->(B,n,3*d_emb)
         Q, K, V = torch.chunk(QKV, 3, dim=-1)  # Shape->(B,n,d_emb)
 
         B, n, d_emb = X.shape
@@ -313,7 +316,7 @@ class MultiHeadAttention(nn.Module):
         A = S @ V_  # Shape->(B,h,n,d_h)
         A = A.transpose(1, 2).reshape(B, n, d_emb)  # Shape->(B,n,d_emb)
 
-        y = A @ W_o  # Shape->(B, n, d_emb)
+        y = A @ self.W_o  # Shape->(B, n, d_emb)
         if self.training:
             y = self.dropout(y)  # Output dropout
 
@@ -513,11 +516,12 @@ class Embedding(nn.Module):
             torch.randn((vocab, d_emb)) * (1 / math.sqrt(d_emb))
         )
 
-    def forward(self, X):
+    def forward(self, X, step):
         # bf16 weights
-        E = self.E_master.to(torch.bfloat16)
-        X = X.to(E.device)
-        return E[X]
+        if step % 10 == 0:
+            self.E = self.E_master.to(torch.bfloat16)
+        X = X.to(self.E.device)
+        return self.E[X]
 
 
 class PositionalEncoding(nn.Module):  # ROPE
@@ -625,16 +629,17 @@ class FFN(nn.Module):  # Swiglu
 
         self.dropout = Dropout()
 
-    def forward(self, X):
+    def forward(self, X, step):
         # bf16 weights
-        W1 = self.W1_master.to(torch.bfloat16)
-        W2 = self.W2_master.to(torch.bfloat16)
-        W3 = self.W3_master.to(torch.bfloat16)
+        if step % 10 == 0:
+            self.W1 = self.W1_master.to(torch.bfloat16)
+            self.W2 = self.W2_master.to(torch.bfloat16)
+            self.W3 = self.W3_master.to(torch.bfloat16)
 
-        gate = X @ W1  # Shape -> (B,n,hidden)
-        up = X @ W2  # Shape -> (B,n,hidden)
+        gate = X @ self.W1  # Shape -> (B,n,hidden)
+        up = X @ self.W2  # Shape -> (B,n,hidden)
         h = self.silu(gate) * up  # Shape -> (B,n,hidden)
-        down = h @ W3  # Shape -> (B,n,d emb)
+        down = h @ self.W3  # Shape -> (B,n,d emb)
         if self.training:
             down = self.dropout(down)
         return down
