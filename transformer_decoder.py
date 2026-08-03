@@ -177,7 +177,7 @@ class Transformer(nn.Module):
                         print(
                             f"Batch {optm_step} | Loss: {running_mean_loss:.4f} | Perplexity: {mean_ppl:.4f}"
                         )
-                    if (optm_step) % 300 == 0 and optm_step > 0:
+                    if (optm_step) % 2500 == 0 and optm_step > 0:
                         self.save()
                     running_mean_loss = 0
                     optm_step += 1
