@@ -120,7 +120,7 @@ class Transformer(nn.Module):
         response = self.tokenizer.decode(generation.flatten().tolist())
         return response
 
-    def fit(self, tokens, epochs=100, steps=5000, a_steps=10, peak_lr=1e-4):
+    def fit(self, tokens, epochs=100, steps=2200, a_steps=10, peak_lr=1e-4):
 
         # self.tokenizer.byte_pair_encoding(text, self.vocab)
 
@@ -177,11 +177,11 @@ class Transformer(nn.Module):
                         print(
                             f"Batch {optm_step} | Loss: {running_mean_loss.item():.4f} | Perplexity: {mean_ppl:.4f}"
                         )
-                    if (optm_step) % 2500 == 0 and optm_step > 0:
-                        self.save()
                     running_mean_loss = 0
                     optm_step += 1
                 step += 1
+            if (epoch) % 5 == 0 and epoch > 0:
+                self.save()
 
             print(
                 f"Epoch {epoch} | Loss: {loss.item():.4f} | Perplexity: {torch.exp(loss).item():.4f}"
