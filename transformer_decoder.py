@@ -304,9 +304,7 @@ class MultiHeadAttention(nn.Module):
 
         # Softmax
         Z = Z.to(torch.float32)  # upscale
-        S = Z - Z.max(dim=-1, keepdim=True).values  # Shape->(B,h,n,n)
-        S_exp = torch.exp(S)
-        S = S_exp / torch.sum(S_exp, dim=-1, keepdim=True)
+        S = torch.softmax(Z, dim=-1)  # Shape->(B,h,n,n)
         if self.training:
             S = self.dropout(S)  # Attention dropout
         S = S.to(torch.bfloat16)  # downscale
@@ -651,7 +649,7 @@ class CrossEntropyLoss(nn.Module):
         logits = Y[:, :-1, :]  # Softmaxed logits Shape->(B, n-1)
         targets = X[:, 1:]  # Sliced token ids Shape->(B, n-1)
 
-        log_probs = logits - torch.logsumexp(logits, dim=-1, keepdim=True)
+        log_probs = torch.log_softmax(logits, dim=-1)
 
         # for b in range(B): # Naive Implementation
         #     for t in range(n):
@@ -681,10 +679,7 @@ class LanguageModelling(nn.Module):
             logits = y @ emb.T  # Shape->(B, n, vocab)
             if logits.dtype == torch.bfloat16:
                 logits = logits.to(torch.float32)
-            # Softmax
-            logits = (
-                logits - logits.max(dim=-1, keepdim=True).values
-            )  # Shape->(B, n, vocab)
+            # Shape->(B, n, vocab)
             # S = torch.exp(logits / temp) / torch.sum(logits / temp, dim=-1, keepdim=True)  # prob
 
             self.loss = self.cross_entropy_loss(
@@ -701,11 +696,7 @@ class LanguageModelling(nn.Module):
             topk, _ = torch.topk(logit, k)
             threshold = topk[:, [-1]]
             logit[logit < threshold] = float("-inf")
-            S = logit - logit.max(dim=-1, keepdim=True).values  # Shape->(B, n, vocab)
-            probs = torch.exp(S / temp) / torch.sum(
-                torch.exp(S / temp), dim=-1, keepdim=True
-            )  # prob
-
+            probs = torch.softmax(logit / temp, dim=-1)  # Shape->(B, n, vocab)
             next_token = torch.multinomial(probs, num_samples=1).item()
             return next_token  # integer token id
 
