@@ -13,7 +13,7 @@ import os
 
 class Transformer(nn.Module):
 
-    def __init__(  # Total parameters: ~96M
+    def __init__(  # Total parameters: ~95M
         self,
         d_emb=768,
         vocab=50257,
