@@ -136,7 +136,7 @@ class Transformer(nn.Module):
         step = 0
         optm_step = 0
         print("Training:")
-        running_mean_loss = 0
+        running_mean_loss = torch.zeros((), device=device)
         for epoch in range(epochs):
             for i in range(steps):
                 # Shape -> (B,n)
@@ -150,11 +150,11 @@ class Transformer(nn.Module):
                     x_emb = transformer_block(x_emb, step)  # Shape->(B,n,d_emb)
                 x_norm = self.norm(x_emb)  # Shape->(B,n,d_emb)
 
-                loss = self.language_modelling(batch, x_norm)  # compute loss
+                loss = self.language_modelling(batch, x_norm, step)  # compute loss
                 scaled_loss = loss / a_steps  # Accumulate and scale
                 scaled_loss.backward()  # compute gradients
 
-                running_mean_loss += loss.item() / a_steps
+                running_mean_loss += loss.detach() / a_steps
 
                 if (step + 1) % a_steps == 0 or (step + 1) == total_steps:
                     if optm_step < warmup:  # Warm up
@@ -175,7 +175,7 @@ class Transformer(nn.Module):
                     mean_ppl = math.exp(running_mean_loss)
                     if (optm_step) % 10 == 0:
                         print(
-                            f"Batch {optm_step} | Loss: {running_mean_loss:.4f} | Perplexity: {mean_ppl:.4f}"
+                            f"Batch {optm_step} | Loss: {running_mean_loss.item():.4f} | Perplexity: {mean_ppl:.4f}"
                         )
                     if (optm_step) % 2500 == 0 and optm_step > 0:
                         self.save()
@@ -186,8 +186,6 @@ class Transformer(nn.Module):
             print(
                 f"Epoch {epoch} | Loss: {loss.item():.4f} | Perplexity: {torch.exp(loss).item():.4f}"
             )
-            if (step) % 3000 == 0:
-                self.save()
         self.save()
 
     def clear_kv_cache(self):
@@ -264,9 +262,12 @@ class MultiHeadAttention(nn.Module):
         self.k_cache = None
         self.v_cache = None
 
-    def forward(self, X, step, use_cache=False, pos=0):
+    def forward(self, X, step=0, use_cache=False, pos=0):
         # bf16 weights
-        if step % 10 == 0:
+        if step % 10 == 0 and self.training:
+            self.W_qkv = self.W_qkv_master.to(torch.bfloat16)
+            self.W_o = self.W_o_master.to(torch.bfloat16)
+        if not self.training:
             self.W_qkv = self.W_qkv_master.to(torch.bfloat16)
             self.W_o = self.W_o_master.to(torch.bfloat16)
 
@@ -496,7 +497,7 @@ class BatchGenerator(nn.Module):
         N = len(tokens)
         starts = np.random.randint(0, N - self.max_seq_len - 1, size=self.batch_size)
         index = starts[:, None] + self.offsets
-        batch = torch.from_numpy(tokens[index])
+        batch = torch.as_tensor(tokens[index], dtype=torch.long)
         return batch  # Shape -> (batch_size,n)
 
 
@@ -509,9 +510,11 @@ class Embedding(nn.Module):
             torch.randn((vocab, d_emb)) * (1 / math.sqrt(d_emb))
         )
 
-    def forward(self, X, step):
+    def forward(self, X, step=0):
         # bf16 weights
-        if step % 10 == 0:
+        if step % 10 == 0 and self.training:
+            self.E = self.E_master.to(torch.bfloat16)
+        if not self.training:
             self.E = self.E_master.to(torch.bfloat16)
         X = X.to(self.E.device)
         return self.E[X]
@@ -622,9 +625,13 @@ class FFN(nn.Module):  # Swiglu
 
         self.dropout = Dropout()
 
-    def forward(self, X, step):
+    def forward(self, X, step=0):
         # bf16 weights
-        if step % 10 == 0:
+        if step % 10 == 0 and self.training:
+            self.W1 = self.W1_master.to(torch.bfloat16)
+            self.W2 = self.W2_master.to(torch.bfloat16)
+            self.W3 = self.W3_master.to(torch.bfloat16)
+        if not self.training:
             self.W1 = self.W1_master.to(torch.bfloat16)
             self.W2 = self.W2_master.to(torch.bfloat16)
             self.W3 = self.W3_master.to(torch.bfloat16)
@@ -666,17 +673,18 @@ class LanguageModelling(nn.Module):
         # Initialize parent class
         super().__init__()
         self.cross_entropy_loss = CrossEntropyLoss()
-        self.emb = emb  # Shape->(vocab,d_emb)
+        self.emb_master = emb  # Shape->(vocab,d_emb)
         self.loss = 0
 
-    def forward(self, token_ids, y, temp=0.6):  # y->(B, n, emb)
-        emb = self.emb.to(torch.bfloat16)  # Shape->(vocab,d_emb)
+    def forward(self, token_ids, y, step=0, temp=0.6):  # y->(B, n, emb)
         if temp <= 0:  # Temperature Scaling
             temp = 1  # Standard softmax
 
         if self.training:
+            if step % 10 == 0:
+                self.emb = self.emb_master.to(torch.bfloat16)  # Shape->(vocab,d_emb)
             temp = 1  # Standard softmax
-            logits = y @ emb.T  # Shape->(B, n, vocab)
+            logits = y @ self.emb.T  # Shape->(B, n, vocab)
             if logits.dtype == torch.bfloat16:
                 logits = logits.to(torch.float32)
             # Shape->(B, n, vocab)
@@ -687,9 +695,10 @@ class LanguageModelling(nn.Module):
             )  # Token id's Shape->(B, n)
             return self.loss
         else:  # generation
+            self.emb = self.emb_master.to(torch.bfloat16)  # Shape->(vocab,d_emb)
             # y shape-> (1,n,d_emb)
             y_last = y[:, -1, :]
-            logit = y_last @ emb.T
+            logit = y_last @ self.emb.T
             if logit.dtype == torch.bfloat16:
                 logit = logit.to(torch.float32)
             k = 50  # Top K Sampling
