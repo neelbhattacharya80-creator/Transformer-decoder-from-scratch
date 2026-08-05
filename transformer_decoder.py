@@ -755,6 +755,38 @@ def load_data(target=1200000000, filepath="fineweb-tokenised.bin"):
     return np.memmap(path, dtype=np.uint16, mode="r")
 
 
+def load_data_stream(target=1200000000, filepath="fineweb-tokenised.bin"):
+    if os.path.exists(filepath):
+        print("Found tokenised file")
+        tokens_memmap = np.memmap(filepath, dtype=np.uint16, mode="r")
+        print("Loaded tokenised file")
+        return tokens_memmap
+    print("tokenising file")
+    tokenisor = tiktoken.get_encoding("gpt2")
+    dataset = load_dataset(
+        "HuggingFaceFW/fineweb", name="sample-10BT", split="train", streaming=True
+    )
+
+    path = Path(__file__).parent / filepath
+
+    total_tokens = 0
+    with open(path, "wb") as f:
+        for row in dataset:
+            tokens = tokenisor.encode_ordinary(row["text"])
+            tokens.append(50256)
+
+            tokens_np = np.array(tokens, dtype=np.uint16)
+            f.write(tokens_np.tobytes())
+
+            total_tokens += len(tokens)
+
+            if total_tokens >= target:
+                break
+    print(f"Finished tokenizing {total_tokens:,} tokens and saved to {path}")
+
+    return np.memmap(filepath, dtype=np.uint16, mode="r")
+
+
 def count_parameters(model):
     return sum(p.numel() for p in model.parameters() if p.requires_grad)
 
