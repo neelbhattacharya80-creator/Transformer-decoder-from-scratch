@@ -44,6 +44,7 @@ nvidia-nvshmem-cu12==3.4.5
 nvidia-nvtx-cu12==12.8.90
 packaging==26.2
 pandas==3.0.5
+pathlib==1.0.1
 propcache==0.5.2
 pyarrow==25.0.0
 python-dateutil==2.9.0.post0

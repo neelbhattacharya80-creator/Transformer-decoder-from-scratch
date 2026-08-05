@@ -9,6 +9,8 @@ from functools import lru_cache
 from pathlib import Path
 import numpy as np
 import os
+import multiprocessing as mp
+import tqdm
 
 
 class Transformer(nn.Module):
@@ -719,30 +721,38 @@ def load_data(target=1200000000, filepath="fineweb-tokenised.bin"):
         tokens_memmap = np.memmap(filepath, dtype=np.uint16, mode="r")
         print("Loaded tokenised file")
         return tokens_memmap
-    print("tokenising file")
+    print("Downloading dataset")
     tokenisor = tiktoken.get_encoding("gpt2")
-    dataset = load_dataset(
-        "HuggingFaceFW/fineweb", name="sample-10BT", split="train", streaming=True
-    )
+    dataset = load_dataset("HuggingFaceFW/fineweb", name="sample-10BT", split="train")
+    eot = tokenisor._special_tokens["<|endoftext|>"]  # 50256
 
     path = Path(__file__).parent / filepath
 
+    def tokenize(doc):
+        tokens = [eot] + tokenisor.encode_ordinary(doc["text"])
+        tokens_np = np.array(tokens, dtype=np.uint16)
+        return tokens_np
+
+    nprocs = max(1, os.cpu_count() // 2)
+
+    print(f"Tokenizing with {nprocs} processes...")
+
     total_tokens = 0
-    with open(path, "wb") as f:
-        for row in dataset:
-            tokens = tokenisor.encode_ordinary(row["text"])
-            tokens.append(50256)
-
-            tokens_np = np.array(tokens, dtype=np.uint16)
-            f.write(tokens_np.tobytes())
-
+    with open(path, "wb") as f, mp.Pool(nprocs) as pool:
+        for tokens in tqdm(
+            pool.imap(tokenize, dataset, chunksize=16),
+            total=len(dataset) if hasattr(dataset, "__len__") else None,
+            unit="docs",
+        ):
+            f.write(tokens.tobytes())
             total_tokens += len(tokens)
 
-            if total_tokens >= target:
+            if target is not None and total_tokens >= target:
                 break
+
     print(f"Finished tokenizing {total_tokens:,} tokens and saved to {path}")
 
-    return np.memmap(filepath, dtype=np.uint16, mode="r")
+    return np.memmap(path, dtype=np.uint16, mode="r")
 
 
 def count_parameters(model):
