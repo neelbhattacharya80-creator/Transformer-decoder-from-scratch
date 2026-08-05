@@ -766,7 +766,7 @@ def load_data_stream(target=1200000000, filepath="fineweb-tokenised.bin"):
     dataset = load_dataset(
         "HuggingFaceFW/fineweb", name="sample-10BT", split="train", streaming=True
     )
-
+    pbar = tqdm(total=target, unit="tok", unit_scale=True)
     path = Path(__file__).parent / filepath
 
     total_tokens = 0
@@ -778,6 +778,7 @@ def load_data_stream(target=1200000000, filepath="fineweb-tokenised.bin"):
             tokens_np = np.array(tokens, dtype=np.uint16)
             f.write(tokens_np.tobytes())
 
+            pbar.update(len(tokens))
             total_tokens += len(tokens)
 
             if total_tokens >= target:
@@ -800,7 +801,7 @@ print(f"Total trainable parameters: {total_params:,}")
 
 # model.load()
 
-model = torch.compile(model, mode="max-autotune")
+# model = torch.compile(model, mode="max-autotune")
 
 model.train()
 model.fit(tokens)
