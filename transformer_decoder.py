@@ -10,7 +10,7 @@ from pathlib import Path
 import numpy as np
 import os
 import multiprocessing as mp
-import tqdm
+from tqdm import tqdm
 
 
 class Transformer(nn.Module):
