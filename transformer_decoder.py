@@ -811,7 +811,7 @@ model.load()
 model.train()
 model.fit(
     epochs=100,
-    steps=15000,
+    steps=1500,
     a_steps=10,
     peak_lr=5e-7,
 )
