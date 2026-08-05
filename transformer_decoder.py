@@ -768,7 +768,7 @@ def load_data_stream(target=1200000000, filepath="fineweb-tokenised.bin", skip_d
     )
     if skip_docs > 0:
         print(
-            f"Streaming FineWeb: skipping first {skip_docs:,} docs to gather {tokens:,} tokens..."
+            f"Streaming FineWeb: skipping first {skip_docs:,} docs to gather {target:,} tokens..."
         )
         dataset = dataset.skip(skip_docs)
     pbar = tqdm(total=target, unit="tok", unit_scale=True)
