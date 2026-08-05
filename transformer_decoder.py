@@ -809,6 +809,7 @@ model.load()
 
 model.train()
 model.fit(
+    tokens,
     epochs=100,
     steps=2000,
     a_steps=10,
