@@ -755,7 +755,7 @@ def load_data(target=1200000000, filepath="fineweb-tokenised.bin"):
     return np.memmap(path, dtype=np.uint16, mode="r")
 
 
-def load_data_stream(target=1200000000, filepath="fineweb-tokenised.bin", skip_docs=0):
+def load_data_stream(target=2000000000, filepath="fineweb-tokenised.bin"):
     if os.path.exists(filepath):
         print("Found tokenised file")
         tokens_memmap = np.memmap(filepath, dtype=np.uint16, mode="r")
@@ -764,13 +764,12 @@ def load_data_stream(target=1200000000, filepath="fineweb-tokenised.bin", skip_d
     print("tokenising file")
     tokenisor = tiktoken.get_encoding("gpt2")
     dataset = load_dataset(
-        "HuggingFaceFW/fineweb", name="sample-10BT", split="train", streaming=True
+        "HuggingFaceFW/fineweb-edu",
+        name="sample-10BT",
+        split="train",
+        streaming=True,
     )
-    if skip_docs > 0:
-        print(
-            f"Streaming FineWeb: skipping first {skip_docs:,} docs to gather {target:,} tokens..."
-        )
-        dataset = dataset.skip(skip_docs)
+
     pbar = tqdm(total=target, unit="tok", unit_scale=True)
     path = Path(__file__).parent / filepath
 
@@ -797,7 +796,7 @@ def count_parameters(model):
     return sum(p.numel() for p in model.parameters() if p.requires_grad)
 
 
-tokens = load_data_stream(skip_docs=3500000)
+tokens = load_data_stream()
 
 
 model = Transformer()
@@ -811,7 +810,7 @@ model.load()
 model.train()
 model.fit(
     epochs=100,
-    steps=1500,
+    steps=2000,
     a_steps=10,
     peak_lr=5e-7,
 )
