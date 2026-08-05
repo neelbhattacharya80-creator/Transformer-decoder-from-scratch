@@ -20,7 +20,7 @@ class Transformer(nn.Module):
         h=8,
         max_seq_len=512,
         hidden_size=2048,  # 8/3d for swiglu
-        batch_size=10,
+        batch_size=32,
         n_blocks=8,
     ):
         # Initialize parent class
