@@ -755,7 +755,7 @@ def load_data(target=1200000000, filepath="fineweb-tokenised.bin"):
     return np.memmap(path, dtype=np.uint16, mode="r")
 
 
-def load_data_stream(target=1200000000, filepath="fineweb-tokenised.bin"):
+def load_data_stream(target=1200000000, filepath="fineweb-tokenised.bin", skip_docs=0):
     if os.path.exists(filepath):
         print("Found tokenised file")
         tokens_memmap = np.memmap(filepath, dtype=np.uint16, mode="r")
@@ -766,6 +766,11 @@ def load_data_stream(target=1200000000, filepath="fineweb-tokenised.bin"):
     dataset = load_dataset(
         "HuggingFaceFW/fineweb", name="sample-10BT", split="train", streaming=True
     )
+    if skip_docs > 0:
+        print(
+            f"Streaming FineWeb: skipping first {skip_docs:,} docs to gather {tokens:,} tokens..."
+        )
+        dataset = dataset.skip(skip_docs)
     pbar = tqdm(total=target, unit="tok", unit_scale=True)
     path = Path(__file__).parent / filepath
 
@@ -792,19 +797,24 @@ def count_parameters(model):
     return sum(p.numel() for p in model.parameters() if p.requires_grad)
 
 
-tokens = load_data_stream()
+tokens = load_data_stream(skip_docs=3500000)
 
 
 model = Transformer()
 total_params = count_parameters(model)
 print(f"Total trainable parameters: {total_params:,}")
 
-# model.load()
+model.load()
 
 # model = torch.compile(model, mode="max-autotune")
 
 model.train()
-model.fit(tokens)
+model.fit(
+    epochs=100,
+    steps=15000,
+    a_steps=10,
+    peak_lr=2e-6,
+)
 
 
 # model.eval()
