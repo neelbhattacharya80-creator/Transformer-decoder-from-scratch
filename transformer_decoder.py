@@ -813,7 +813,7 @@ model.fit(
     epochs=100,
     steps=15000,
     a_steps=10,
-    peak_lr=2e-6,
+    peak_lr=5e-7,
 )
 
 
