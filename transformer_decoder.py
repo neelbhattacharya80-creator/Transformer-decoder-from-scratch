@@ -755,7 +755,7 @@ def load_data(target=1200000000, filepath="fineweb-tokenised.bin"):
     return np.memmap(path, dtype=np.uint16, mode="r")
 
 
-def load_data_stream(target=2000000000, filepath="fineweb-tokenised.bin"):
+def load_data_stream(target=1200000000, filepath="fineweb-tokenised.bin"):
     if os.path.exists(filepath):
         print("Found tokenised file")
         tokens_memmap = np.memmap(filepath, dtype=np.uint16, mode="r")
@@ -764,12 +764,8 @@ def load_data_stream(target=2000000000, filepath="fineweb-tokenised.bin"):
     print("tokenising file")
     tokenisor = tiktoken.get_encoding("gpt2")
     dataset = load_dataset(
-        "HuggingFaceFW/fineweb-edu",
-        name="sample-10BT",
-        split="train",
-        streaming=True,
+        "HuggingFaceFW/fineweb", name="sample-10BT", split="train", streaming=True
     )
-
     pbar = tqdm(total=target, unit="tok", unit_scale=True)
     path = Path(__file__).parent / filepath
 
@@ -803,18 +799,12 @@ model = Transformer()
 total_params = count_parameters(model)
 print(f"Total trainable parameters: {total_params:,}")
 
-model.load()
+# model.load()
 
 # model = torch.compile(model, mode="max-autotune")
 
 model.train()
-model.fit(
-    tokens,
-    epochs=100,
-    steps=2000,
-    a_steps=10,
-    peak_lr=5e-7,
-)
+model.fit(tokens)
 
 
 # model.eval()
