@@ -22,7 +22,7 @@ class Transformer(nn.Module):
         h=16,
         max_seq_len=512,
         hidden_size=2816,  # 8/3d for swiglu
-        batch_size=24,
+        batch_size=16,
         n_blocks=12,
     ):
         # Initialize parent class
@@ -122,7 +122,7 @@ class Transformer(nn.Module):
         response = self.tokenizer.decode(generation.flatten().tolist())
         return response
 
-    def fit(self, tokens, epochs=100, steps=3300, a_steps=10, peak_lr=3e-4):
+    def fit(self, tokens, epochs=100, steps=3500, a_steps=10, peak_lr=3e-4):
 
         # self.tokenizer.byte_pair_encoding(text, self.vocab)
 
@@ -182,12 +182,12 @@ class Transformer(nn.Module):
                     running_mean_loss = 0
                     optm_step += 1
                 step += 1
-            if (epoch) % 5 == 0 and epoch > 0:
-                self.save()
 
             print(
                 f"Epoch {epoch} | Loss: {loss.item():.4f} | Perplexity: {torch.exp(loss).item():.4f}"
             )
+            if (epoch) % 5 == 0 and epoch > 0:
+                self.save()
         self.save()
 
     def clear_kv_cache(self):
