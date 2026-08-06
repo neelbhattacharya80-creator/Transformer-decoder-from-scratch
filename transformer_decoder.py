@@ -222,14 +222,24 @@ class TransformerBlock(nn.Module):
         self.residual = Residual()
         self.ffn = FFN(d_emb, hidden_size, n_blocks)
 
-    def forward(self, X, step, use_cache=False, pos=0):
+    def forward(self, X, step=0, use_cache=False, pos=0):
         x_norm1 = self.norm1(X)  # Shape -> (B,n,d_emb)
-        a = self.multi_head_attention(
-            x_norm1, step, use_cache, pos
-        )  # Shape -> (B,n,d_emb)
+        if self.training:
+            a = self.multi_head_attention(
+                x_norm1, step, use_cache, pos
+            )  # Shape -> (B,n,d_emb)
+        else:
+            a = self.multi_head_attention(
+                x_norm1, use_cache, pos
+            )  # Shape -> (B,n,d_emb)
+
         z = self.residual(X, a)  # Shape -> (B,n,d_emb)
         z_norm = self.norm2(z)  # Shape -> (B,n,d_emb)
-        f = self.ffn(z_norm, step)  # Shape -> (B,n,d_emb)
+        if self.training:
+            f = self.ffn(z_norm)  # Shape -> (B,n,d_emb)
+        else:
+            f = self.ffn(z_norm, step)  # Shape -> (B,n,d_emb)
+
         y = z + f
 
         return y
