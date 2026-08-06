@@ -15,15 +15,15 @@ from tqdm import tqdm
 
 class Transformer(nn.Module):
 
-    def __init__(  # Total parameters: ~95M
+    def __init__(  # Total parameters: ~200M
         self,
         d_emb=1024,
         vocab=50257,
         h=16,
         max_seq_len=512,
         hidden_size=2816,  # 8/3d for swiglu
-        batch_size=16,
-        n_blocks=14,
+        batch_size=24,
+        n_blocks=12,
     ):
         # Initialize parent class
         super().__init__()
@@ -122,7 +122,7 @@ class Transformer(nn.Module):
         response = self.tokenizer.decode(generation.flatten().tolist())
         return response
 
-    def fit(self, tokens, epochs=100, steps=3000, a_steps=10, peak_lr=3e-4):
+    def fit(self, tokens, epochs=100, steps=3300, a_steps=10, peak_lr=3e-4):
 
         # self.tokenizer.byte_pair_encoding(text, self.vocab)
 
@@ -600,8 +600,8 @@ class Dropout(nn.Module):
         if self.training:
             mask = (torch.rand_like(x) < self.keep).to(x.dtype)
             mask = mask.to(x.dtype)
-            x.mul_(mask).div_(self.keep)
-            return x
+            drop = x.mul(mask).div_(self.keep)
+            return drop
         else:
             return x
 
