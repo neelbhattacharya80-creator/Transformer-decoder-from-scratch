@@ -17,13 +17,13 @@ class Transformer(nn.Module):
 
     def __init__(  # Total parameters: ~95M
         self,
-        d_emb=768,
+        d_emb=1024,
         vocab=50257,
-        h=8,
+        h=16,
         max_seq_len=512,
-        hidden_size=2048,  # 8/3d for swiglu
+        hidden_size=2816,  # 8/3d for swiglu
         batch_size=32,
-        n_blocks=8,
+        n_blocks=14,
     ):
         # Initialize parent class
         super().__init__()
@@ -122,7 +122,7 @@ class Transformer(nn.Module):
         response = self.tokenizer.decode(generation.flatten().tolist())
         return response
 
-    def fit(self, tokens, epochs=100, steps=2200, a_steps=10, peak_lr=1e-4):
+    def fit(self, tokens, epochs=100, steps=3000, a_steps=10, peak_lr=3e-4):
 
         # self.tokenizer.byte_pair_encoding(text, self.vocab)
 
@@ -765,7 +765,7 @@ def load_data(target=1200000000, filepath="fineweb-tokenised.bin"):
     return np.memmap(path, dtype=np.uint16, mode="r")
 
 
-def load_data_stream(target=1200000000, filepath="fineweb-tokenised.bin"):
+def load_data_stream(target=4000000000, filepath="fineweb-tokenised.bin"):
     if os.path.exists(filepath):
         print("Found tokenised file")
         tokens_memmap = np.memmap(filepath, dtype=np.uint16, mode="r")
