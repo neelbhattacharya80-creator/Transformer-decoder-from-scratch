@@ -599,8 +599,9 @@ class Dropout(nn.Module):
     def forward(self, x):
         if self.training:
             mask = (torch.rand_like(x) < self.keep).to(x.dtype)
-            x_drop = (x * mask) / self.keep
-            return x_drop
+            mask = mask.to(x.dtype)
+            x.mul_(mask).div_(self.keep)
+            return x
         else:
             return x
 
