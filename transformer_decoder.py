@@ -123,7 +123,7 @@ class Transformer(nn.Module):
         response = self.tokenizer.decode(generation.flatten().tolist())
         return response
 
-    def fit(self, tokens, epochs=1, steps=500, a_steps=10, peak_lr=3e-4, profile=True):
+    def fit(self, tokens, epochs=1, steps=5000, a_steps=10, peak_lr=3e-4, profile=True):
 
         # self.tokenizer.byte_pair_encoding(text, self.vocab)
 
