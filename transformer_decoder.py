@@ -68,7 +68,7 @@ class Transformer(nn.Module):
             history += response
 
     @torch.no_grad()
-    def decoder(self, text, token_limit=256):
+    def decoder(self, text, token_limit=128):
 
         self.clear_kv_cache()
 
@@ -689,7 +689,7 @@ class LanguageModelling(nn.Module):
         self.emb_master = emb  # Shape->(vocab,d_emb)
         self.loss = 0
 
-    def forward(self, token_ids, y, step=0, temp=0.6):  # y->(B, n, emb)
+    def forward(self, token_ids, y, step=0, temp=0.6, penalty=1.3):  # y->(B, n, emb)
         if temp <= 0:  # Temperature Scaling
             temp = 1  # Standard softmax
 
@@ -714,6 +714,13 @@ class LanguageModelling(nn.Module):
             logit = y_last @ self.emb.T
             if logit.dtype == torch.bfloat16:
                 logit = logit.to(torch.float32)
+            # Repetition penalty: divide down (boost up) logits for seen tokens
+            seen = torch.unique(token_ids)
+            seen_logits = logit[0, seen]
+            logit[0, seen] = torch.where(
+                seen_logits > 0, seen_logits / penalty, seen_logits * penalty
+            )
+
             k = 50  # Top K Sampling
             topk, _ = torch.topk(logit, k)
             threshold = topk[:, [-1]]
