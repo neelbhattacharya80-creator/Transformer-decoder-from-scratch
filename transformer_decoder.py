@@ -716,7 +716,7 @@ class LanguageModelling(nn.Module):
                 logit = logit.to(torch.float32)
             # Repetition penalty: divide down (boost up) logits for seen tokens
             seen = torch.unique(token_ids)
-            seen_logits = logit[0, seen]
+            seen_logits = logit[0, seen].to(logit.device)
             logit[0, seen] = torch.where(
                 seen_logits > 0, seen_logits / penalty, seen_logits * penalty
             )
@@ -818,6 +818,7 @@ total_params = count_parameters(model)
 print(f"Total trainable parameters: {total_params:,}")
 
 model.load()
+model.to(device)
 
 # model = torch.compile(model, mode="max-autotune")
 
