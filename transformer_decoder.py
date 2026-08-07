@@ -230,7 +230,7 @@ class TransformerBlock(nn.Module):
             )  # Shape -> (B,n,d_emb)
         else:
             a = self.multi_head_attention(
-                x_norm1, use_cache, pos
+                x_norm1, use_cache=use_cache, pos=pos
             )  # Shape -> (B,n,d_emb)
 
         z = self.residual(X, a)  # Shape -> (B,n,d_emb)
