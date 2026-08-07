@@ -4,21 +4,31 @@
 
 This project is a decoder-only Transformer implemented almost entirely from scratch to better understand how modern language models work at a low level.
 
-PyTorch is only used for automatic differentiation, tensor operations, and GPU acceleration. Core components including multi-head self-attention, RoPE positional encoding, RMS Norm, dropout, Swiglu, AdamW, cross-entropy loss, KV caching, batching, and the training loop—are implemented manually. The current model contains approximately **30 million trainable parameters** and supports both training and autoregressive text generation.
+PyTorch is only used for automatic differentiation, tensor operations, and GPU acceleration. Core components including multi-head self-attention, RoPE positional encoding, AdamW, RMS Norm, dropout, Swiglu, AdamW, cross-entropy loss, KV caching, batching, and the training loop—are implemented manually. The current model contains approximately **200 million trainable parameters** trained on 4 billion fineweb-edu tokens following scaling laws.
 
 ## Learning Outcomes
 
-Building the model highlighted that implementation details are often more challenging than the underlying mathematics. I encountered bugs involving device management, where my custom AdamW optimizer remained on the CPU after the model was moved to the GPU, as well as several RoPE implementation bugs caused by incorrect tensor reshaping and inference positional indexing, all of which prevented the model from training or generating correctly until resolved.
+The goal was to produce a Language Model similar to GPT2 without relying on high-level abstractions.
+Building from first principles required a complete understanding of the architechture and pipeline and the mathematical
+building blocks along with extensive focus towards optimisation to ensure the model trained relatively fast to be trained to a reasonable level.
+Initially the model used LayerNorm and FFNs which were later updated to RMS norm,Swiglu along with residual scaling and Mixed Precision.
 
-As the project matured, I focused on optimization as well as correctness. I replaced separate key, query, and value projections for each attention head with a single fused QKV projection followed by reshaping into a 4D tensor, making the implementation both cleaner and more efficient. Implementing AdamW from scratch provided a much deeper understanding of momentum, variance estimation, bias correction, and weight decay than simply using the PyTorch implementation.
+Training included Custom made AdamW along with warmup and cosine decay. First run a 95M model was trained on 1.2 B tokens 
+for 3 epochs which stalled around 3.8 a second training run with a fresh 2B dataset was run for 15k steps however a lr of 5e-7 
+was used which resulted in no progress atall. Finally 200M model was trained on 4B tokens with a lr of 3e-4 reaching convergence around 
+~3.42(with dropout) and between 3.3 without dropout.
 
-I also experimented with building my own Byte Pair Encoding tokenizer. While it functioned correctly, the pure Python implementation was far too slow for practical training, so I switched to **tiktoken** while keeping the remainder of the model implemented from scratch.
+Inference was unusually slow at first due to the model being loaded in the cpu. Output quality was extremely repetitive with no coherence
+before implementing repetition penalty which seemed to solve the problem very well. PE bugs during inference also significantly reduced
+context.
 
-Training required several optimization improvements. A fixed learning rate consistently stalled around a loss of **3.8**, so I introduced warmup and cosine learning-rate decay, allowing training to converge to approximately **3.5**. GPU memory limitations on my RTX 4060 prevented using larger batches, so I implemented gradient accumulation to achieve larger effective batch sizes while reducing optimization volatility. Update(Switched layer norm and ffn to rms norm and swiglu)
 
 ## Training Progress
 
-The model was initially trained on WikiText-103 to validate the implementation. The loss decreased from approximately **10** to **6** early in training, continued through **5 → 4**, plateaued briefly around **4**, and eventually converged to roughly **3.5**.
+Model Trained on 4 Billion fineweb-edu tokens following optimal scaling 
+with 10% dropout model stalled at ~3.4 however on a test run done with 0 dropout model performed significantly better being in the 
+3.28-3.38 range
+Loss progression was very fast and gradually decreased after crossing 4 at which point it gradually converged around 3.42(with dropout)
 
 ## Features
 
@@ -38,45 +48,29 @@ The model was initially trained on WikiText-103 to validate the implementation. 
 * Top-k sampling for text generation
 
 ## Sample Output
-PS C:\Users\neelb\Documents\CS> & C:/Users/neelb/AppData/Local/Programs/Python/Python313/python.exe c:/Users/neelb/Documents/CS/Projects/Transformer/transformer_decoder.py
-Total trainable parameters: 29,937,024
+Total trainable parameters: 205,629,440
 Starting conversation: 
 
-You:the capital of france is
+You:The US has been the leading figure in terms of AI
 
-GPT:  a place of thought , so that no one can be seen in any single person . 
+GPT:  adoption.
+In March, Google announced a $400 million investment into artificial intelligence (AI) by Google Inc., which will create a new company called Google Insights that would help developers find high-quality and meaningful content about their products or services. The data could be used to understand consumer behavior through visualizations, text analytics and other insights.
+Google is also investing heavily in artificial intelligence for its search engine, making it easier for consumers to find relevant information on websites like Google Maps and Bing Ads, while simultaneously improving the way people see ads using images. “We’re building this into our platform so we can make a big
 
+You:However recently AI returns are failing to keep up with investments
 
- = = = = Modern = = = = 
+GPT:  in advertising and online marketing. In fact, there have only been 3 years worth of efforts being made for the industry to implement these new capabilities,” said Steve Ballmer, CEO of Google.<|endoftext|>A few days ago I visited my local library, looking at books and magazines from all over the world. There were some very interesting titles – but not many. Then I started thinking about what else I might want to read:
+I am hoping that I am going to take a break from reading so much I don't get distracted, but I do want to come back again to read more. At least I hope to have time for the
 
-
- The earliest known modernist novel , The Great Man , is the novel of the same name , in which the person is called the " Old Woman " or " Old Woman " . The first novel , The Great Man , was published in 1794 ; it was published in 1796 . The novel is a play in which the narrator is a woman who is given access to her marriage , and the play was published in 1794 . The novel was written in 1790 , and was published in 1790 . It was published in 1796 , and was translated into English , but by the time it was published , it was published in 1797 . 
-
- The novel has been adapted from a novel by William Blake and published by the English professor John R. <unk> , who wrote it in 1793 . The novel was published in 1793 and was published in 1794 . The novel was published in 1794 by Samuel <unk> , who was the first publisher of The Great Man . The novel was written by John R. <unk> , the author of The Great Man , who wrote it in 1795 ,
-
-You:america was discovered by
-
-GPT:  an unknown man . R. <unk> , who wrote the novel in 1795 , wrote The Great Man in 1797 . The book was published in 1794 by John R. <unk> , who wrote the book in 1795 . R. <unk> , a writer of The Great Man , wrote the novel in 1797 for the Danish newspaper <unk> , which was published in 1796 . R. <unk> , author of The Great Man , wrote the novel in 1798 . 
-
-
- = = = = Modern = = = = 
-
-
- Modern scholars have found that the novel is considered one of the most famous English works in the world . They argue that the novel was based on a story about a man who is called " the man who has the right to leave his home . " The novel is not a " book of the same name , " but it is not a poem . 
-
-
- = = = Modern period = = = 
-
-
- The novel was originally written as a novel by a friend of William Blake , who wrote a letter to his friend , John R. <unk> , and was published in 1796 . The novel was written by John R
-
-You:quit
-PS C:\Users\neelb\Documents\CS> 
 
 ## Current Performance
 
-The model has learned grammar, spelling, punctuation, and sentence structure well, producing fluent and readable text. Its main limitation is **long-range context retention**, as generation is strongly influenced by recently generated tokens, often causing **topic drift**. The primary bottlenecks are now **training data** and **compute** rather than the architecture itself.
+The model has learned grammar, spelling, punctuation, and sentence structure well, producing fluent and readable text. It is able to keep track of context for short paragraphs and produces coherent text. <|endoftext|> token seems to cause complete loss of context but apart from that performs well.
+
+The model was trained on a 5090 for roughly 25 hours with 2sec/update step and a throughput of 81k/update step
 
 ## Future Work
 
-The next objective is to train the model on the **FineWeb** dataset using rented GPUs. Reducing the training loss from **~3.5** toward **3.0–2.5** should significantly improve coherence, context retention, and factual consistency while providing a better understanding of how scaling data and compute affects model performance.
+The next objective is to create custom kernels to fuse operations and train on more data
+ideally doubling the size to 400M and training on the full 10B sample. 
+
