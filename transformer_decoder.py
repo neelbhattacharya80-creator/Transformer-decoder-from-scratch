@@ -16,13 +16,13 @@ class Transformer(nn.Module):
 
     def __init__(  # Total parameters: ~96M
         self,
-        d_emb=768,
+        d_emb=1024,
         vocab=50257,
-        h=8,
+        h=16,
         max_seq_len=512,
         hidden_size=2048,  # 8/3d for swiglu
-        batch_size=10,
-        n_blocks=8,
+        batch_size=16,
+        n_blocks=12,
     ):
         # Initialize parent class
         super().__init__()
@@ -121,7 +121,7 @@ class Transformer(nn.Module):
         response = self.tokenizer.decode(generation.flatten().tolist())
         return response
 
-    def fit(self, tokens, epochs=1, steps=500, a_steps=10, peak_lr=1e-4, profile=True):
+    def fit(self, tokens, epochs=1, steps=500, a_steps=10, peak_lr=3e-4, profile=True):
 
         # self.tokenizer.byte_pair_encoding(text, self.vocab)
 
