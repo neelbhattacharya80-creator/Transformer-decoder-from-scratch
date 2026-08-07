@@ -10,17 +10,19 @@ from pathlib import Path
 import numpy as np
 import os
 import torch.profiler
+import multiprocessing as mp
+from tqdm import tqdm
 
 
 class Transformer(nn.Module):
 
-    def __init__(  # Total parameters: ~96M
+    def __init__(  # Total parameters: ~200M
         self,
         d_emb=1024,
         vocab=50257,
         h=16,
         max_seq_len=512,
-        hidden_size=2048,  # 8/3d for swiglu
+        hidden_size=2816,  # 8/3d for swiglu
         batch_size=16,
         n_blocks=12,
     ):
@@ -121,7 +123,7 @@ class Transformer(nn.Module):
         response = self.tokenizer.decode(generation.flatten().tolist())
         return response
 
-    def fit(self, tokens, epochs=1, steps=500, a_steps=10, peak_lr=3e-4, profile=True):
+    def fit(self, tokens, epochs=100, steps=5000, a_steps=10, peak_lr=3e-4):
 
         # self.tokenizer.byte_pair_encoding(text, self.vocab)
 
@@ -138,22 +140,8 @@ class Transformer(nn.Module):
         optm_step = 0
         print("Training:")
         running_mean_loss = torch.zeros((), device=device)
-
-        profile_warmup = 20
-        profile_len = 100
         for epoch in range(epochs):
             for i in range(steps):
-                if profile and step == profile_warmup:
-                    prof = torch.profiler.profile(
-                        activities=[
-                            torch.profiler.ProfilerActivity.CPU,
-                            torch.profiler.ProfilerActivity.CUDA,
-                        ],
-                        record_shapes=True,
-                        profile_memory=True,
-                        with_stack=True,
-                    )
-                    prof.__enter__()
                 # Shape -> (B,n)
                 batch = self.batch_generator(tokens)
 
@@ -188,59 +176,13 @@ class Transformer(nn.Module):
                     self.optimiser.update(lr)  # update parameters
                     self.optimiser.clear_grad()  # clear gradients
                     mean_ppl = math.exp(running_mean_loss)
-                    if (optm_step) % 1 == 0:
+                    if (optm_step) % 10 == 0:
                         print(
                             f"Batch {optm_step} | Loss: {running_mean_loss.item():.4f} | Perplexity: {mean_ppl:.4f}"
                         )
-                    if (optm_step) % 2500 == 0 and optm_step > 0:
-                        self.save()
-                        pass
                     running_mean_loss = 0
                     optm_step += 1
-                if profile and profile_warmup <= step < (profile_warmup + profile_len):
-                    prof.step()
-
-                if profile and step == (profile_warmup + profile_len):
-                    torch.cuda.synchronize()
-                    prof.__exit__(None, None, None)
-
-                    print("\n CUDA ")
-                    print(
-                        prof.key_averages().table(
-                            sort_by="cuda_time_total",
-                            row_limit=50,
-                        )
-                    )
-
-                    print("\n CPU ")
-                    print(
-                        prof.key_averages().table(
-                            sort_by="cpu_time_total",
-                            row_limit=50,
-                        )
-                    )
-                    stats = prof.key_averages()
-
-                    print(
-                        stats.table(
-                            sort_by="self_cuda_memory_usage",
-                            row_limit=50,
-                        )
-                    )
-
-                    prof.export_chrome_trace("trace.json")
-                    print("Saved trace.json")
-                    return
-
                 step += 1
-
-            print(
-                f"Epoch {epoch} | Loss: {loss.item():.4f} | Perplexity: {torch.exp(loss).item():.4f}"
-            )
-            if (step) % 3000 == 0:
-                self.save()
-                pass
-        self.save()
 
     def clear_kv_cache(self):
         for block in self.transformer_blocks:
@@ -274,14 +216,24 @@ class TransformerBlock(nn.Module):
         self.residual = Residual()
         self.ffn = FFN(d_emb, hidden_size, n_blocks)
 
-    def forward(self, X, step, use_cache=False, pos=0):
+    def forward(self, X, step=0, use_cache=False, pos=0):
         x_norm1 = self.norm1(X)  # Shape -> (B,n,d_emb)
-        a = self.multi_head_attention(
-            x_norm1, step, use_cache, pos
-        )  # Shape -> (B,n,d_emb)
+        if self.training:
+            a = self.multi_head_attention(
+                x_norm1, step, use_cache, pos
+            )  # Shape -> (B,n,d_emb)
+        else:
+            a = self.multi_head_attention(
+                x_norm1, use_cache, pos
+            )  # Shape -> (B,n,d_emb)
+
         z = self.residual(X, a)  # Shape -> (B,n,d_emb)
         z_norm = self.norm2(z)  # Shape -> (B,n,d_emb)
-        f = self.ffn(z_norm, step)  # Shape -> (B,n,d_emb)
+        if self.training:
+            f = self.ffn(z_norm)  # Shape -> (B,n,d_emb)
+        else:
+            f = self.ffn(z_norm, step)  # Shape -> (B,n,d_emb)
+
         y = z + f
 
         return y
@@ -641,8 +593,9 @@ class Dropout(nn.Module):
     def forward(self, x):
         if self.training:
             mask = (torch.rand_like(x) < self.keep).to(x.dtype)
-            x_drop = (x * mask) / self.keep
-            return x_drop
+            mask = mask.to(x.dtype)
+            drop = x.mul(mask).div_(self.keep)
+            return drop
         else:
             return x
 
@@ -767,7 +720,47 @@ class LanguageModelling(nn.Module):
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
-def load_data(target=70000, filepath="fineweb-tokenised.bin"):
+def load_data(target=1200000000, filepath="fineweb-tokenised.bin"):
+    if os.path.exists(filepath):
+        print("Found tokenised file")
+        tokens_memmap = np.memmap(filepath, dtype=np.uint16, mode="r")
+        print("Loaded tokenised file")
+        return tokens_memmap
+    print("Downloading dataset")
+    tokenisor = tiktoken.get_encoding("gpt2")
+    dataset = load_dataset("HuggingFaceFW/fineweb", name="sample-10BT", split="train")
+    eot = tokenisor._special_tokens["<|endoftext|>"]  # 50256
+
+    path = Path(__file__).parent / filepath
+
+    def tokenize(doc):
+        tokens = [eot] + tokenisor.encode_ordinary(doc["text"])
+        tokens_np = np.array(tokens, dtype=np.uint16)
+        return tokens_np
+
+    nprocs = max(1, os.cpu_count() // 2)
+
+    print(f"Tokenizing with {nprocs} processes...")
+
+    total_tokens = 0
+    with open(path, "wb") as f, mp.Pool(nprocs) as pool:
+        for tokens in tqdm(
+            pool.imap(tokenize, dataset, chunksize=16),
+            total=len(dataset) if hasattr(dataset, "__len__") else None,
+            unit="docs",
+        ):
+            f.write(tokens.tobytes())
+            total_tokens += len(tokens)
+
+            if target is not None and total_tokens >= target:
+                break
+
+    print(f"Finished tokenizing {total_tokens:,} tokens and saved to {path}")
+
+    return np.memmap(path, dtype=np.uint16, mode="r")
+
+
+def load_data_stream(target=4000000000, filepath="fineweb-tokenised.bin"):
     if os.path.exists(filepath):
         print("Found tokenised file")
         tokens_memmap = np.memmap(filepath, dtype=np.uint16, mode="r")
@@ -778,7 +771,7 @@ def load_data(target=70000, filepath="fineweb-tokenised.bin"):
     dataset = load_dataset(
         "HuggingFaceFW/fineweb", name="sample-10BT", split="train", streaming=True
     )
-
+    pbar = tqdm(total=target, unit="tok", unit_scale=True)
     path = Path(__file__).parent / filepath
 
     total_tokens = 0
@@ -790,6 +783,7 @@ def load_data(target=70000, filepath="fineweb-tokenised.bin"):
             tokens_np = np.array(tokens, dtype=np.uint16)
             f.write(tokens_np.tobytes())
 
+            pbar.update(len(tokens))
             total_tokens += len(tokens)
 
             if total_tokens >= target:
@@ -803,7 +797,7 @@ def count_parameters(model):
     return sum(p.numel() for p in model.parameters() if p.requires_grad)
 
 
-tokens = load_data()
+tokens = load_data_stream()
 
 
 model = Transformer()
