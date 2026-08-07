@@ -810,13 +810,13 @@ model = Transformer()
 total_params = count_parameters(model)
 print(f"Total trainable parameters: {total_params:,}")
 
-# model.load()
+model.load()
 
 # model = torch.compile(model, mode="max-autotune")
 
-model.train()
-model.fit(tokens)
+# model.train()
+# model.fit(tokens)
 
 
-# model.eval()
-# model.generator()
+model.eval()
+model.generator()
