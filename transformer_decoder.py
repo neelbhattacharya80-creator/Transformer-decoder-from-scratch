@@ -123,7 +123,7 @@ class Transformer(nn.Module):
         response = self.tokenizer.decode(generation.flatten().tolist())
         return response
 
-    def fit(self, tokens, epochs=1, steps=5000, a_steps=10, peak_lr=3e-4):
+    def fit(self, tokens, epochs=1, steps=500, a_steps=10, peak_lr=3e-4, profile=True):
 
         # self.tokenizer.byte_pair_encoding(text, self.vocab)
 
@@ -140,8 +140,22 @@ class Transformer(nn.Module):
         optm_step = 0
         print("Training:")
         running_mean_loss = torch.zeros((), device=device)
+
+        profile_warmup = 20
+        profile_len = 100
         for epoch in range(epochs):
             for i in range(steps):
+                if profile and step == profile_warmup:
+                    prof = torch.profiler.profile(
+                        activities=[
+                            torch.profiler.ProfilerActivity.CPU,
+                            torch.profiler.ProfilerActivity.CUDA,
+                        ],
+                        record_shapes=True,
+                        profile_memory=True,
+                        with_stack=True,
+                    )
+                    prof.__enter__()
                 # Shape -> (B,n)
                 batch = self.batch_generator(tokens)
 
@@ -176,13 +190,59 @@ class Transformer(nn.Module):
                     self.optimiser.update(lr)  # update parameters
                     self.optimiser.clear_grad()  # clear gradients
                     mean_ppl = math.exp(running_mean_loss)
-                    if (optm_step) % 10 == 0:
+                    if (optm_step) % 1 == 0:
                         print(
                             f"Batch {optm_step} | Loss: {running_mean_loss.item():.4f} | Perplexity: {mean_ppl:.4f}"
                         )
+                    if (optm_step) % 2500 == 0 and optm_step > 0:
+                        self.save()
+                        pass
                     running_mean_loss = 0
                     optm_step += 1
+                if profile and profile_warmup <= step < (profile_warmup + profile_len):
+                    prof.step()
+
+                if profile and step == (profile_warmup + profile_len):
+                    torch.cuda.synchronize()
+                    prof.__exit__(None, None, None)
+
+                    print("\n CUDA ")
+                    print(
+                        prof.key_averages().table(
+                            sort_by="cuda_time_total",
+                            row_limit=50,
+                        )
+                    )
+
+                    print("\n CPU ")
+                    print(
+                        prof.key_averages().table(
+                            sort_by="cpu_time_total",
+                            row_limit=50,
+                        )
+                    )
+                    stats = prof.key_averages()
+
+                    print(
+                        stats.table(
+                            sort_by="self_cuda_memory_usage",
+                            row_limit=50,
+                        )
+                    )
+
+                    prof.export_chrome_trace("trace.json")
+                    print("Saved trace.json")
+                    return
+
                 step += 1
+
+            print(
+                f"Epoch {epoch} | Loss: {loss.item():.4f} | Perplexity: {torch.exp(loss).item():.4f}"
+            )
+            if (step) % 3000 == 0:
+                self.save()
+                pass
+        self.save()
 
     def clear_kv_cache(self):
         for block in self.transformer_blocks:
