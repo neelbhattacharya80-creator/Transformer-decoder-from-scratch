@@ -69,7 +69,7 @@ class Transformer(nn.Module):
             history += response
 
     @torch.no_grad()
-    def decoder(self, text, token_limit=256):
+    def decoder(self, text, token_limit=128):
 
         self.clear_kv_cache()
 
