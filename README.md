@@ -65,9 +65,8 @@ I am hoping that I am going to take a break from reading so much I don't get dis
 
 ## Current Performance
 
-The model has learned grammar, spelling, punctuation, and sentence structure well, producing fluent and readable text. It is able to keep track of context for short paragraphs and produces coherent text. <|endoftext|> token seems to cause complete loss of context but apart from that performs well.
-
-The model was trained on a 5090 for roughly 25 hours with 2sec/update step and a throughput of 81k/update step
+The model has learned grammar, spelling, punctuation, and sentence structure well, producing fluent and readable text. It is able to keep track of context for short paragraphs and produces coherent text. Long term context retention is missing topic drift, hallucination is present.
+Presently the model has no factual or reasoning abilities which are expected given the training budget.
 
 ## Future Work
 
