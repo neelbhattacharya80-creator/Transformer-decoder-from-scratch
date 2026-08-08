@@ -119,7 +119,10 @@ class Transformer(nn.Module):
             pos += 1
             token_count += 1
         generation = tokens[:, prompt_len:]
-        response = self.tokenizer.decode(generation.flatten().tolist())
+        eot = self.tokenizer._special_tokens["<|endoftext|>"]  # 50256
+        gen_list = generation.flatten().tolist()
+        gen_list = [t for t in gen_list if t != eot]
+        response = self.tokenizer.decode(gen_list)
         return response
 
     def fit(self, tokens, epochs=100, steps=5000, a_steps=10, peak_lr=3e-4):
